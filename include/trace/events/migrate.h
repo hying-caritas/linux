@@ -6,6 +6,7 @@
 #define _TRACE_MIGRATE_H
 
 #include <linux/tracepoint.h>
+#include <trace/events/mmflags.h>
 
 #define MIGRATE_MODE						\
 	EM( MIGRATE_ASYNC,	"MIGRATE_ASYNC")		\
@@ -70,6 +71,31 @@ TRACE_EVENT(mm_migrate_pages,
 		__entry->failed,
 		__print_symbolic(__entry->mode, MIGRATE_MODE),
 		__print_symbolic(__entry->reason, MIGRATE_REASON))
+);
+
+TRACE_EVENT(mm_migrate_move_page,
+
+	TP_PROTO(struct page *from, struct page *to, int status),
+
+	TP_ARGS(from, to, status),
+
+	TP_STRUCT__entry(
+		__field(struct page *, from)
+		__field(struct page *, to)
+		__field(int, status)
+	),
+
+	TP_fast_assign(
+		__entry->from = from;
+		__entry->to = to;
+		__entry->status = status;
+	),
+
+	TP_printk("node from=%d to=%d status=%d flags=%s refs=%d",
+		page_to_nid(__entry->from), page_to_nid(__entry->to),
+		__entry->status,
+		show_page_flags(__entry->from->flags & ((1UL << NR_PAGEFLAGS) - 1)),
+		page_ref_count(__entry->from))
 );
 #endif /* _TRACE_MIGRATE_H */
 
