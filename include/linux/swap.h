@@ -688,5 +688,25 @@ static inline bool mem_cgroup_swap_full(struct page *page)
 }
 #endif
 
+static inline bool reclaim_anon_pages(struct mem_cgroup *memcg,
+				      int node_id)
+{
+	/* Always age anon pages when we have swap */
+	if (memcg == NULL) {
+		if (get_nr_swap_pages() > 0)
+			return true;
+	} else {
+		if (mem_cgroup_get_nr_swap_pages(memcg) > 0)
+			return true;
+	}
+
+	/* Also age anon pages if we can auto-migrate them */
+	if (next_migration_node(node_id) >= 0)
+		return true;
+
+	/* No way to reclaim anon pages */
+	return false;
+}
+
 #endif /* __KERNEL__*/
 #endif /* _LINUX_SWAP_H */
