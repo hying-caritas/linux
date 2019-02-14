@@ -135,6 +135,7 @@ static inline int register_one_node(int nid)
 }
 
 extern int next_migration_node(int current_node);
+extern int next_promotion_node(int current_node);
 extern void unregister_one_node(int nid);
 extern int register_cpu_under_node(unsigned int cpu, unsigned int nid);
 extern int unregister_cpu_under_node(unsigned int cpu, unsigned int nid);
@@ -179,6 +180,11 @@ static inline void register_hugetlbfs_with_node(node_registration_func_t reg,
 }
 
 static inline int next_migration_node(int current_node)
+{
+	return -1;
+}
+
+static inline int next_promotion_node(int current_node)
 {
 	return -1;
 }
