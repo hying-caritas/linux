@@ -1001,56 +1001,17 @@ out:
 	return rc;
 }
 
-static int __unmap_and_move(struct page *page, struct page *newpage,
-				int force, enum migrate_mode mode)
+static int __unmap_and_move(new_page_t get_new_page,
+			    free_page_t put_new_page,
+			    unsigned long private, struct page *page,
+			    enum migrate_mode mode,
+			    enum migrate_reason reason)
 {
 	int rc = -EAGAIN;
 	int page_was_mapped = 0;
 	struct anon_vma *anon_vma = NULL;
 	bool is_lru = !__PageMovable(page);
-
-	if (!trylock_page(page)) {
-		if (!force || mode == MIGRATE_ASYNC)
-			goto out;
-
-		/*
-		 * It's not safe for direct compaction to call lock_page.
-		 * For example, during page readahead pages are added locked
-		 * to the LRU. Later, when the IO completes the pages are
-		 * marked uptodate and unlocked. However, the queueing
-		 * could be merging multiple pages for one bio (e.g.
-		 * mpage_readpages). If an allocation happens for the
-		 * second or third page, the process can end up locking
-		 * the same page twice and deadlocking. Rather than
-		 * trying to be clever about what pages can be locked,
-		 * avoid the use of lock_page for direct compaction
-		 * altogether.
-		 */
-		if (current->flags & PF_MEMALLOC)
-			goto out;
-
-		lock_page(page);
-	}
-
-	if (PageWriteback(page)) {
-		/*
-		 * Only in the case of a full synchronous migration is it
-		 * necessary to wait for PageWriteback. In the async case,
-		 * the retry loop is too short and in the sync-light case,
-		 * the overhead of stalling is too much
-		 */
-		switch (mode) {
-		case MIGRATE_SYNC:
-		case MIGRATE_SYNC_NO_COPY:
-			break;
-		default:
-			rc = -EBUSY;
-			goto out_unlock;
-		}
-		if (!force)
-			goto out_unlock;
-		wait_on_page_writeback(page);
-	}
+	struct page *newpage;
 
 	/*
 	 * By try_to_unmap(), page->mapcount goes down to 0 here. In this case,
@@ -1069,6 +1030,12 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	if (PageAnon(page) && !PageKsm(page))
 		anon_vma = page_get_anon_vma(page);
 
+	newpage = get_new_page(page, private);
+	if (!newpage) {
+		rc = -ENOMEM;
+		goto out;
+	}
+
 	/*
 	 * Block others from accessing the new page when we get around to
 	 * establishing additional references. We are usually the only one
@@ -1078,11 +1045,11 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	 * This is much like races on refcount of oldpage: just don't BUG().
 	 */
 	if (unlikely(!trylock_page(newpage)))
-		goto out_unlock;
+		goto out_put;
 
 	if (unlikely(!is_lru)) {
 		rc = move_to_new_page(newpage, page, mode);
-		goto out_unlock_both;
+		goto out_unlock;
 	}
 
 	/*
@@ -1101,7 +1068,7 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 		VM_BUG_ON_PAGE(PageAnon(page), page);
 		if (page_has_private(page)) {
 			try_to_free_buffers(page);
-			goto out_unlock_both;
+			goto out_unlock;
 		}
 	} else if (page_mapped(page)) {
 		/* Establish migration ptes */
@@ -1118,15 +1085,9 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	if (page_was_mapped)
 		remove_migration_ptes(page,
 			rc == MIGRATEPAGE_SUCCESS ? newpage : page, false);
-
-out_unlock_both:
-	unlock_page(newpage);
 out_unlock:
-	/* Drop an anon_vma reference if we took one */
-	if (anon_vma)
-		put_anon_vma(anon_vma);
-	unlock_page(page);
-out:
+	unlock_page(newpage);
+out_put:
 	/*
 	 * If migration is successful, decrease refcount of the newpage
 	 * which will not free the page because new page owner increased
@@ -1137,12 +1098,20 @@ out:
 	 * state.
 	 */
 	if (rc == MIGRATEPAGE_SUCCESS) {
+		set_page_owner_migrate_reason(newpage, reason);
 		if (unlikely(!is_lru))
 			put_page(newpage);
 		else
 			putback_lru_page(newpage);
+	} else if (put_new_page) {
+		put_new_page(newpage, private);
+	} else {
+		put_page(newpage);
 	}
-
+out:
+	/* Drop an anon_vma reference if we took one */
+	if (anon_vma)
+		put_anon_vma(anon_vma);
 	return rc;
 }
 
@@ -1167,8 +1136,7 @@ static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 				   int force, enum migrate_mode mode,
 				   enum migrate_reason reason)
 {
-	int rc = MIGRATEPAGE_SUCCESS;
-	struct page *newpage = NULL;
+	int rc = -EAGAIN;
 
 	if (!thp_migration_supported() && PageTransHuge(page))
 		return -ENOMEM;
@@ -1183,17 +1151,57 @@ static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 				__ClearPageIsolated(page);
 			unlock_page(page);
 		}
+		rc = MIGRATEPAGE_SUCCESS;
 		goto out;
 	}
 
-	newpage = get_new_page(page, private);
-	if (!newpage)
-		return -ENOMEM;
+	if (!trylock_page(page)) {
+		if (!force || mode == MIGRATE_ASYNC)
+			return rc;
 
-	rc = __unmap_and_move(page, newpage, force, mode);
-	if (rc == MIGRATEPAGE_SUCCESS)
-		set_page_owner_migrate_reason(newpage, reason);
+		/*
+		 * It's not safe for direct compaction to call lock_page.
+		 * For example, during page readahead pages are added locked
+		 * to the LRU. Later, when the IO completes the pages are
+		 * marked uptodate and unlocked. However, the queueing
+		 * could be merging multiple pages for one bio (e.g.
+		 * mpage_readpages). If an allocation happens for the
+		 * second or third page, the process can end up locking
+		 * the same page twice and deadlocking. Rather than
+		 * trying to be clever about what pages can be locked,
+		 * avoid the use of lock_page for direct compaction
+		 * altogether.
+		 */
+		if (current->flags & PF_MEMALLOC)
+			return rc;
 
+		lock_page(page);
+	}
+
+	if (PageWriteback(page)) {
+		/*
+		 * Only in the case of a full synchronous migration is it
+		 * necessary to wait for PageWriteback. In the async case,
+		 * the retry loop is too short and in the sync-light case,
+		 * the overhead of stalling is too much
+		 */
+		switch (mode) {
+		case MIGRATE_SYNC:
+		case MIGRATE_SYNC_NO_COPY:
+			break;
+		default:
+			rc = -EBUSY;
+			goto out_unlock;
+		}
+		if (!force)
+			goto out_unlock;
+		wait_on_page_writeback(page);
+	}
+	rc = __unmap_and_move(get_new_page, put_new_page, private,
+			      page, mode, reason);
+
+out_unlock:
+	unlock_page(page);
 out:
 	if (rc != -EAGAIN) {
 		/*
@@ -1234,9 +1242,8 @@ out:
 		if (rc != -EAGAIN) {
 			if (likely(!__PageMovable(page))) {
 				putback_lru_page(page);
-				goto put_new;
+				goto done;
 			}
-
 			lock_page(page);
 			if (PageMovable(page))
 				putback_movable_page(page);
@@ -1245,13 +1252,8 @@ out:
 			unlock_page(page);
 			put_page(page);
 		}
-put_new:
-		if (put_new_page)
-			put_new_page(newpage, private);
-		else
-			put_page(newpage);
 	}
-
+done:
 	return rc;
 }
 
