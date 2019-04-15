@@ -1244,6 +1244,33 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			; /* try to reclaim the page below */
 		}
 
+		if (!PageHuge(page)) {
+			int rc = migrate_demote_mapping(page);
+
+			/*
+			 * -ENOMEM on a THP may indicate either migration is
+			 * unsupported or there was not enough contiguous
+			 * space. Split the THP into base pages and retry the
+			 * head immediately. The tail pages will be considered
+			 * individually within the current loop's page list.
+			 */
+			if (rc == -ENOMEM && PageTransHuge(page) &&
+			    !split_huge_page_to_list(page, page_list))
+				rc = migrate_demote_mapping(page);
+
+			if (rc == MIGRATEPAGE_SUCCESS) {
+				unlock_page(page);
+				if (likely(put_page_testzero(page)))
+					goto free_it;
+				/*
+				 * Speculative reference will free this page,
+				 * so leave it off the LRU.
+				 */
+				nr_reclaimed++;
+				continue;
+			}
+		}
+
 		/*
 		 * Anonymous process memory has backing store?
 		 * Try to allocate it some swap space here.

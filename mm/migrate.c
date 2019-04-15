@@ -1115,6 +1115,58 @@ out:
 	return rc;
 }
 
+static struct page *alloc_demote_node_page(struct page *page, unsigned long node)
+{
+	/*
+	 * The flags are set to allocate only on the desired node in the
+	 * migration path, and to fail fast if not immediately available. We
+	 * are already doing memory reclaim, we don't want heroic efforts to
+	 * get a page.
+	 */
+	gfp_t mask = GFP_NOWAIT | __GFP_NOWARN | __GFP_NORETRY |
+			__GFP_NOMEMALLOC | __GFP_THISNODE | __GFP_HIGHMEM |
+			__GFP_MOVABLE;
+	struct page *newpage;
+
+	if (PageTransHuge(page)) {
+		mask |= __GFP_COMP;
+		newpage = alloc_pages_node(node, mask, HPAGE_PMD_ORDER);
+		if (newpage)
+			prep_transhuge_page(newpage);
+	} else
+		newpage = alloc_pages_node(node, mask, 0);
+
+	return newpage;
+}
+
+/**
+ * migrate_demote_mapping() - Migrate this page and its mappings to its
+ *                            demotion node.
+ * @page: A locked, isolated, non-huge page that should migrate to its current
+ *        node's demotion target, if available. Since this is intended to be
+ *        called during memory reclaim, all flag options are set to fail fast.
+ *
+ * @returns: MIGRATEPAGE_SUCCESS if successful, -errno otherwise.
+ */
+int migrate_demote_mapping(struct page *page)
+{
+	int next_nid = next_migration_node(page_to_nid(page));
+
+	VM_BUG_ON_PAGE(!PageLocked(page), page);
+	VM_BUG_ON_PAGE(PageHuge(page), page);
+	VM_BUG_ON_PAGE(PageLRU(page), page);
+
+	if (next_nid < 0)
+		return -ENOSYS;
+	if (PageTransHuge(page) && !thp_migration_supported())
+		return -ENOMEM;
+
+	/* MIGRATE_ASYNC is the most light weight and never blocks.*/
+	return __unmap_and_move(alloc_demote_node_page, NULL, next_nid,
+				page, MIGRATE_ASYNC, MR_DEMOTION);
+}
+
+
 /*
  * gcc 4.7 and 4.8 on arm get an ICEs when inlining unmap_and_move().  Work
  * around it.
