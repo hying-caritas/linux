@@ -28,6 +28,7 @@
 #include <linux/mm_inline.h>
 #include <linux/page_ext.h>
 #include <linux/page_owner.h>
+#include <linux/migrate.h>
 
 #include "internal.h"
 
@@ -676,6 +677,35 @@ void dec_node_page_state(struct page *page, enum node_stat_item item)
 EXPORT_SYMBOL(dec_node_page_state);
 #endif
 
+void inc_hmem_state(enum migrate_hmem_reason hr, struct page *src, struct page *dst)
+{
+	/*
+	 * There are two zone stats for each 'migrate_hmem_reason',
+	 * a source and a destination.  Given the hmem_reason,
+	 * calculate the two corresponding zone stats:
+	 */
+	int zone_stat_src = HMEM_MIGRATE_FIRST_ENTRY + 2 * hr - 1;
+	int zone_stat_dst = HMEM_MIGRATE_FIRST_ENTRY + 2 * hr;
+
+	/*
+	 * HMEM_MIGRATE_FIRST_ENTRY is also the "unknown" which will
+	 * be tolerated for now since all code paths have not had
+	 * hmem migrations reasons added.
+	 *
+	 * An invalid value here probably comes from an uninitialized
+	 * stack instance of 'struct migrate_detail'.
+	 */
+	if (WARN_ON_ONCE(hr < MR_HMEM_UNKNOWN || hr >= MR_HMEM_NR_REASONS))
+		return;
+	if (hr == MR_HMEM_UNKNOWN)
+		return;
+	mod_zone_page_state(page_zone(src), zone_stat_src,
+			    hpage_nr_pages(src));
+	mod_zone_page_state(page_zone(dst), zone_stat_dst,
+			    hpage_nr_pages(dst));
+}
+EXPORT_SYMBOL(inc_hmem_state);
+
 /*
  * Fold a differential into the global counters.
  * Returns the number of counters updated.
@@ -1124,6 +1154,7 @@ const char * const vmstat_text[] = {
 	"nr_zspages",
 #endif
 	"nr_free_cma",
+	"hmem_unknown",
 
 	/* enum numa_stat_item counters */
 #ifdef CONFIG_NUMA

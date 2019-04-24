@@ -206,7 +206,11 @@ enum zone_stat_item {
 	NR_ZSPAGES,		/* allocated in zsmalloc */
 #endif
 	NR_FREE_CMA_PAGES,
-	NR_VM_ZONE_STAT_ITEMS };
+#define HMEM_MIGRATE(__hmem_name)      __hmem_name ## _SRC, __hmem_name ## _DEST
+	HMEM_MIGRATE_UNKNOWN,
+	HMEM_MIGRATE_FIRST_ENTRY = HMEM_MIGRATE_UNKNOWN,
+	NR_VM_ZONE_STAT_ITEMS
+};
 
 enum node_stat_item {
 	NR_LRU_BASE,

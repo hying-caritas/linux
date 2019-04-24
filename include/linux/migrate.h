@@ -29,8 +29,14 @@ enum migrate_reason {
 	MR_TYPES
 };
 
+enum migrate_hmem_reason {
+	MR_HMEM_UNKNOWN,
+	MR_HMEM_NR_REASONS
+};
+
 struct migrate_detail {
 	enum migrate_reason reason;
+	enum migrate_hmem_reason h_reason;
 };
 
 /* In mm/debug.c; also keep sync with include/trace/events/migrate.h */
