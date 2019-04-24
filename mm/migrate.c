@@ -1166,6 +1166,7 @@ int migrate_demote_mapping(struct page *page)
 
 	/* MIGRATE_ASYNC is the most light weight and never blocks.*/
 	m_detail.reason = MR_DEMOTION;
+	m_detail.h_reason = MR_HMEM_RECLAIM_DEMOTE;
 	return __unmap_and_move(alloc_demote_node_page, NULL, next_nid,
 				page, MIGRATE_ASYNC, &m_detail);
 }

@@ -1155,6 +1155,8 @@ const char * const vmstat_text[] = {
 #endif
 	"nr_free_cma",
 	"hmem_unknown",
+	"hmem_reclaim_demote_src",
+	"hmem_reclaim_demote_dst",
 
 	/* enum numa_stat_item counters */
 #ifdef CONFIG_NUMA

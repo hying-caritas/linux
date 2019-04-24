@@ -209,6 +209,7 @@ enum zone_stat_item {
 #define HMEM_MIGRATE(__hmem_name)      __hmem_name ## _SRC, __hmem_name ## _DEST
 	HMEM_MIGRATE_UNKNOWN,
 	HMEM_MIGRATE_FIRST_ENTRY = HMEM_MIGRATE_UNKNOWN,
+	HMEM_MIGRATE(MR_HMEM_RECLAIM_DEMOTE),
 	NR_VM_ZONE_STAT_ITEMS
 };
 

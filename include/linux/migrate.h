@@ -31,6 +31,7 @@ enum migrate_reason {
 
 enum migrate_hmem_reason {
 	MR_HMEM_UNKNOWN,
+	MR_HMEM_RECLAIM_DEMOTE,
 	MR_HMEM_NR_REASONS
 };
 
