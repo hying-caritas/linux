@@ -101,7 +101,9 @@ long hugetlb_unreserve_pages(struct inode *inode, long start, long end,
 						long freed);
 bool isolate_huge_page(struct page *page, struct list_head *list);
 void putback_active_hugepage(struct page *page);
-void move_hugetlb_state(struct page *oldpage, struct page *newpage, int reason);
+struct migrate_detail; /* hack for crazy include ordering */
+void move_hugetlb_state(struct page *oldpage, struct page *newpage,
+			struct migrate_detail *m_detail);
 void free_huge_page(struct page *page);
 void hugetlb_fix_reserve_counts(struct inode *inode);
 extern struct mutex *hugetlb_fault_mutex_table;
@@ -279,8 +281,9 @@ static inline void putback_active_hugepage(struct page *page)
 {
 }
 
-static inline void move_hugetlb_state(struct page *oldpage,
-					struct page *newpage, int reason)
+struct migrate_detail; /* hack for crazy include ordering */
+static inline void move_hugetlb_state(struct page *oldpage, struct page *newpage,
+				      struct migrate_detail *m_detail)
 {
 }
 

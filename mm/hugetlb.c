@@ -28,6 +28,7 @@
 #include <linux/jhash.h>
 #include <linux/numa.h>
 #include <linux/llist.h>
+#include <linux/migrate.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -5041,12 +5042,13 @@ void putback_active_hugepage(struct page *page)
 	put_page(page);
 }
 
-void move_hugetlb_state(struct page *oldpage, struct page *newpage, int reason)
+void move_hugetlb_state(struct page *oldpage, struct page *newpage,
+			struct migrate_detail *m_detail)
 {
 	struct hstate *h = page_hstate(oldpage);
 
 	hugetlb_cgroup_migrate(oldpage, newpage);
-	set_page_owner_migrate_reason(newpage, reason);
+	set_page_owner_migrate_reason(newpage, m_detail->reason);
 
 	/*
 	 * transfer temporary state of the new huge page. This is

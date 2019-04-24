@@ -1495,14 +1495,16 @@ check_again:
 	}
 
 	if (!list_empty(&cma_page_list)) {
+		struct migrate_detail m_detail = {};
 		/*
 		 * drop the above get_user_pages reference.
 		 */
 		for (i = 0; i < nr_pages; i++)
 			put_page(pages[i]);
 
+		m_detail.reason = MR_CONTIG_RANGE;
 		if (migrate_pages(&cma_page_list, new_non_cma_page,
-				  NULL, 0, MIGRATE_SYNC, MR_CONTIG_RANGE)) {
+				  NULL, 0, MIGRATE_SYNC, &m_detail)) {
 			/*
 			 * some of the pages failed migration. Do get_user_pages
 			 * without migration.

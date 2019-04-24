@@ -1364,9 +1364,11 @@ do_migrate_range(unsigned long start_pfn, unsigned long end_pfn)
 		put_page(page);
 	}
 	if (!list_empty(&source)) {
+		struct migrate_detail m_detail = {};
 		/* Allocate a new page from the nearest neighbor node */
+		m_detail.reason = MR_MEMORY_HOTPLUG;
 		ret = migrate_pages(&source, new_node_page, NULL, 0,
-					MIGRATE_SYNC, MR_MEMORY_HOTPLUG);
+					MIGRATE_SYNC, &m_detail);
 		if (ret) {
 			list_for_each_entry(page, &source, lru) {
 				pr_warn("migrating pfn %lx failed ret:%d ",

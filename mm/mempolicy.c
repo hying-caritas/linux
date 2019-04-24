@@ -1056,8 +1056,9 @@ static int migrate_to_node(struct mm_struct *mm, int source, int dest,
 			flags | MPOL_MF_DISCONTIG_OK, &pagelist);
 
 	if (!list_empty(&pagelist)) {
+		struct migrate_detail m_detail = { .reason = MR_SYSCALL };
 		err = migrate_pages(&pagelist, alloc_new_node_page, NULL, dest,
-					MIGRATE_SYNC, MR_SYSCALL);
+					MIGRATE_SYNC, &m_detail);
 		if (err)
 			putback_movable_pages(&pagelist);
 	}
@@ -1313,9 +1314,12 @@ static long do_mbind(unsigned long start, unsigned long len,
 		int nr_failed = 0;
 
 		if (!list_empty(&pagelist)) {
+			struct migrate_detail m_detail = {};
+
+			m_detail.reason = MR_MEMPOLICY_MBIND;
 			WARN_ON_ONCE(flags & MPOL_MF_LAZY);
 			nr_failed = migrate_pages(&pagelist, new_page, NULL,
-				start, MIGRATE_SYNC, MR_MEMPOLICY_MBIND);
+				start, MIGRATE_SYNC, &m_detail);
 			if (nr_failed)
 				putback_movable_pages(&pagelist);
 		}

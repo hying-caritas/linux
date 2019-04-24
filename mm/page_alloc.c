@@ -8300,6 +8300,8 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 	migrate_prep();
 
 	while (pfn < end || !list_empty(&cc->migratepages)) {
+		struct migrate_detail m_detail = {};
+
 		if (fatal_signal_pending(current)) {
 			ret = -EINTR;
 			break;
@@ -8322,8 +8324,9 @@ static int __alloc_contig_migrate_range(struct compact_control *cc,
 							&cc->migratepages);
 		cc->nr_migratepages -= nr_reclaimed;
 
+		m_detail.reason = MR_CONTIG_RANGE;
 		ret = migrate_pages(&cc->migratepages, alloc_migrate_target,
-				    NULL, 0, cc->mode, MR_CONTIG_RANGE);
+				    NULL, 0, cc->mode, &m_detail);
 	}
 	if (ret < 0) {
 		putback_movable_pages(&cc->migratepages);

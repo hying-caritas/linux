@@ -1669,6 +1669,7 @@ static int get_any_page(struct page *page, unsigned long pfn, int flags)
 static int soft_offline_huge_page(struct page *page, int flags)
 {
 	int ret;
+	struct migrate_detail m_detail = {};
 	unsigned long pfn = page_to_pfn(page);
 	struct page *hpage = compound_head(page);
 	LIST_HEAD(pagelist);
@@ -1697,8 +1698,9 @@ static int soft_offline_huge_page(struct page *page, int flags)
 		return -EBUSY;
 	}
 
+	m_detail.reason = MR_MEMORY_FAILURE;
 	ret = migrate_pages(&pagelist, new_page, NULL, MPOL_MF_MOVE_ALL,
-				MIGRATE_SYNC, MR_MEMORY_FAILURE);
+				MIGRATE_SYNC, &m_detail);
 	if (ret) {
 		pr_info("soft offline: %#lx: hugepage migration failed %d, type %lx (%pGp)\n",
 			pfn, ret, page->flags, &page->flags);
@@ -1728,6 +1730,7 @@ static int soft_offline_huge_page(struct page *page, int flags)
 static int __soft_offline_page(struct page *page, int flags)
 {
 	int ret;
+	struct migrate_detail m_detail = {};
 	unsigned long pfn = page_to_pfn(page);
 
 	/*
@@ -1787,8 +1790,9 @@ static int __soft_offline_page(struct page *page, int flags)
 			inc_node_page_state(page, NR_ISOLATED_ANON +
 						page_is_file_cache(page));
 		list_add(&page->lru, &pagelist);
+		m_detail.reason = MR_MEMORY_FAILURE;
 		ret = migrate_pages(&pagelist, new_page, NULL, MPOL_MF_MOVE_ALL,
-					MIGRATE_SYNC, MR_MEMORY_FAILURE);
+					MIGRATE_SYNC, &m_detail);
 		if (ret) {
 			if (!list_empty(&pagelist))
 				putback_movable_pages(&pagelist);

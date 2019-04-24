@@ -2071,6 +2071,7 @@ bool compaction_zonelist_suitable(struct alloc_context *ac, int order,
 static enum compact_result
 compact_zone(struct compact_control *cc, struct capture_control *capc)
 {
+	struct migrate_detail m_detail = {};
 	enum compact_result ret;
 	unsigned long start_pfn = cc->zone->zone_start_pfn;
 	unsigned long end_pfn = zone_end_pfn(cc->zone);
@@ -2194,9 +2195,10 @@ compact_zone(struct compact_control *cc, struct capture_control *capc)
 			;
 		}
 
+		m_detail.reason = MR_COMPACTION;
 		err = migrate_pages(&cc->migratepages, compaction_alloc,
 				compaction_free, (unsigned long)cc, cc->mode,
-				MR_COMPACTION);
+				&m_detail);
 
 		trace_mm_compaction_migratepages(cc->nr_migratepages, err,
 							&cc->migratepages);
