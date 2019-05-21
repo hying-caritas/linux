@@ -26,6 +26,7 @@ const char *migrate_reason_names[MR_TYPES] = {
 	"numa_misplaced",
 	"cma",
 	"demotion",
+	"promotion",
 };
 
 const struct trace_print_flags pageflag_names[] = {

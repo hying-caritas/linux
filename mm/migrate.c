@@ -1117,7 +1117,7 @@ out:
 	return rc;
 }
 
-static struct page *alloc_demote_node_page(struct page *page, unsigned long node)
+static struct page *alloc_node_page(struct page *page, unsigned long node)
 {
 	/*
 	 * The flags are set to allocate only on the desired node in the
@@ -1141,20 +1141,9 @@ static struct page *alloc_demote_node_page(struct page *page, unsigned long node
 	return newpage;
 }
 
-/**
- * migrate_demote_mapping() - Migrate this page and its mappings to its
- *                            demotion node.
- * @page: A locked, isolated, non-huge page that should migrate to its current
- *        node's demotion target, if available. Since this is intended to be
- *        called during memory reclaim, all flag options are set to fail fast.
- *
- * @returns: MIGRATEPAGE_SUCCESS if successful, -errno otherwise.
- */
-int migrate_demote_mapping(struct page *page)
+static int migrate_mapping(struct page *page, int next_nid,
+			   struct migrate_detail *m_detail)
 {
-	int next_nid = next_migration_node(page_to_nid(page));
-	struct migrate_detail m_detail = {};
-
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(PageHuge(page), page);
 	VM_BUG_ON_PAGE(PageLRU(page), page);
@@ -1164,13 +1153,52 @@ int migrate_demote_mapping(struct page *page)
 	if (PageTransHuge(page) && !thp_migration_supported())
 		return -ENOMEM;
 
+	if (m_detail->reason == MR_PROMOTION)
+		pr_info_once("promote page from %d to %d\n",
+			page_to_nid(page), next_nid);
+
 	/* MIGRATE_ASYNC is the most light weight and never blocks.*/
-	m_detail.reason = MR_DEMOTION;
-	m_detail.h_reason = MR_HMEM_RECLAIM_DEMOTE;
-	return __unmap_and_move(alloc_demote_node_page, NULL, next_nid,
-				page, MIGRATE_ASYNC, &m_detail);
+	return __unmap_and_move(alloc_node_page, NULL, next_nid,
+				page, MIGRATE_ASYNC, m_detail);
 }
 
+/**
+ * migrate_demote_mapping() - Migrate this page and its mappings to its
+ *                            demotion node.
+ * @page: A locked, isolated, non-huge page that should migrate to its current
+ *        node's demotion target, if available.
+ *
+ * @returns: MIGRATEPAGE_SUCCESS if successful, -errno otherwise.
+ */
+int migrate_demote_mapping(struct page *page)
+{
+	struct migrate_detail m_detail = {
+		.reason = MR_DEMOTION,
+		.h_reason = MR_HMEM_RECLAIM_DEMOTE,
+	};
+
+	return migrate_mapping(page, next_migration_node(page_to_nid(page)),
+			       &m_detail);
+}
+
+/**
+ * migrate_promote_mapping() - Migrate this page and its mappings to its
+ *                             promotion node.
+ * @page: A locked, isolated, non-huge page that should migrate to its current
+ *        node's promotion target, if available.
+ *
+ * @returns: MIGRATEPAGE_SUCCESS if successful, -errno otherwise.
+ */
+int migrate_promote_mapping(struct page *page)
+{
+	struct migrate_detail m_detail = {
+		.reason = MR_PROMOTION,
+		.h_reason = MR_HMEM_RECLAIM_PROMOTE,
+	};
+
+	return migrate_mapping(page, next_promotion_node(page_to_nid(page)),
+			       &m_detail);
+}
 
 /*
  * gcc 4.7 and 4.8 on arm get an ICEs when inlining unmap_and_move().  Work
