@@ -48,6 +48,7 @@
 #include <linux/page_owner.h>
 #include <linux/sched/mm.h>
 #include <linux/ptrace.h>
+#include <linux/sched/sysctl.h>
 
 #include <asm/tlbflush.h>
 
@@ -1946,8 +1947,7 @@ COMPAT_SYSCALL_DEFINE6(move_pages, pid_t, pid, compat_ulong_t, nr_pages,
  * Returns true if this is a safe migration target node for misplaced NUMA
  * pages. Currently it only checks the watermarks which crude
  */
-static bool migrate_balanced_pgdat(struct pglist_data *pgdat,
-				   unsigned long nr_migrate_pages)
+static bool migrate_balanced_pgdat(struct pglist_data *pgdat, int order)
 {
 	int z;
 
@@ -1958,12 +1958,9 @@ static bool migrate_balanced_pgdat(struct pglist_data *pgdat,
 			continue;
 
 		/* Avoid waking kswapd by allocating pages_to_migrate pages. */
-		if (!zone_watermark_ok(zone, 0,
-				       high_wmark_pages(zone) +
-				       nr_migrate_pages,
-				       ZONE_MOVABLE, 0))
-			continue;
-		return true;
+		if (zone_watermark_ok(zone, order, high_wmark_pages(zone),
+				      ZONE_MOVABLE, 0))
+			return true;
 	}
 	return false;
 }
@@ -1990,8 +1987,19 @@ static int numamigrate_isolate_page(pg_data_t *pgdat, struct page *page)
 	VM_BUG_ON_PAGE(compound_order(page) && !PageTransHuge(page), page);
 
 	/* Avoid migrating to a node that is nearly full */
-	if (!migrate_balanced_pgdat(pgdat, compound_nr(page)))
+	if (!migrate_balanced_pgdat(pgdat, compound_order(page))) {
+		if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) {
+			int z;
+
+			for (z = pgdat->nr_zones - 1; z >= 0; z--) {
+				if (populated_zone(pgdat->node_zones + z))
+					break;
+			}
+			wakeup_kswapd(pgdat->node_zones + z,
+				      0, compound_order(page), ZONE_MOVABLE);
+		}
 		return 0;
+	}
 
 	if (isolate_lru_page(page))
 		return 0;

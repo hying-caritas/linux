@@ -57,6 +57,7 @@
 
 #include <linux/swapops.h>
 #include <linux/balloon_compaction.h>
+#include <linux/sched/sysctl.h>
 
 #include "internal.h"
 
@@ -3462,8 +3463,11 @@ static bool pgdat_balanced(pg_data_t *pgdat, int order, int classzone_idx)
 {
 	int i;
 	unsigned long mark = -1;
+	unsigned long promote_ratelimit;
 	struct zone *zone;
 
+	promote_ratelimit = sysctl_numa_balancing_rate_limit <<
+		(20 - PAGE_SHIFT);
 	/*
 	 * Check watermarks bottom-up as lower zones are more likely to
 	 * meet watermarks.
@@ -3475,6 +3479,9 @@ static bool pgdat_balanced(pg_data_t *pgdat, int order, int classzone_idx)
 			continue;
 
 		mark = high_wmark_pages(zone);
+		if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
+		    next_migration_node(pgdat->node_id) != -1)
+			mark += promote_ratelimit;
 		if (zone_watermark_ok_safe(zone, order, mark, classzone_idx))
 			return true;
 	}
