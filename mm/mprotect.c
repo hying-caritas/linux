@@ -83,8 +83,21 @@ static unsigned long change_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 				int nid;
 
 				/* Avoid TLB flush if possible */
-				if (pte_protnone(oldpte))
+				if (pte_protnone(oldpte)) {
+					if (!(sysctl_numa_balancing_mode &
+					      NUMA_BALANCING_MEMORY_TIERING))
+						continue;
+
+					/*
+					 * PTE young bit is used to record
+					 * whether the page is accessed in
+					 * last scan period
+					 */
+					if (pte_young(oldpte))
+						set_pte_at(vma->vm_mm, addr, pte,
+							   pte_mkold(oldpte));
 					continue;
+				}
 
 				page = vm_normal_page(vma, addr, oldpte);
 				if (!page || PageKsm(page))

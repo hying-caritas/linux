@@ -3811,10 +3811,8 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	 */
 	vmf->ptl = pte_lockptr(vma->vm_mm, vmf->pmd);
 	spin_lock(vmf->ptl);
-	if (unlikely(!pte_same(*vmf->pte, vmf->orig_pte))) {
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		goto out;
-	}
+	if (unlikely(!pte_same(*vmf->pte, vmf->orig_pte)))
+		goto unmap_out;
 
 	/*
 	 * Make it present again, Depending on how arch implementes non
@@ -3828,17 +3826,17 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	ptep_modify_prot_commit(vma, vmf->address, vmf->pte, old_pte, pte);
 	update_mmu_cache(vma, vmf->address, vmf->pte);
 
+	/* Only migrate if accessed twice */
+	if (!pte_young(old_pte))
+		goto unmap_out;
+
 	page = vm_normal_page(vma, vmf->address, pte);
-	if (!page) {
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		return 0;
-	}
+	if (!page)
+		goto unmap_out;
 
 	/* TODO: handle PTE-mapped THP */
-	if (PageCompound(page)) {
-		pte_unmap_unlock(vmf->pte, vmf->ptl);
-		return 0;
-	}
+	if (PageCompound(page))
+		goto unmap_out;
 
 	/*
 	 * Avoid grouping on RO pages in general. RO pages shouldn't hurt as
@@ -3876,9 +3874,13 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	} else
 		flags |= TNF_MIGRATE_FAIL;
 
-out:
 	if (page_nid != NUMA_NO_NODE)
 		task_numa_fault(last_cpupid, page_nid, 1, flags);
+	return 0;
+
+unmap_out:
+	pte_unmap_unlock(vmf->pte, vmf->ptl);
+out:
 	return 0;
 }
 

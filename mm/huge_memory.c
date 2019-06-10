@@ -1558,6 +1558,10 @@ vm_fault_t do_huge_pmd_numa_page(struct vm_fault *vmf, pmd_t pmd)
 	if (unlikely(!pmd_same(pmd, *vmf->pmd)))
 		goto out_unlock;
 
+	/* Only migrate if accessed twice */
+	if (!pmd_young(*vmf->pmd))
+		goto out_unlock;
+
 	/*
 	 * If there are potential migrations, wait for completion and retry
 	 * without disrupting NUMA hinting information. Do not relock and
@@ -1978,8 +1982,19 @@ int change_huge_pmd(struct vm_area_struct *vma, pmd_t *pmd,
 		if (is_huge_zero_pmd(*pmd))
 			goto unlock;
 
-		if (pmd_protnone(*pmd))
+		if (pmd_protnone(*pmd)) {
+			if (!(sysctl_numa_balancing_mode &
+			      NUMA_BALANCING_MEMORY_TIERING))
+				goto unlock;
+
+			/*
+			 * PMD young bit is used to record whether the
+			 * page is accessed in last scan period
+			 */
+			if (pmd_young(*pmd))
+				set_pmd_at(mm, addr, pmd, pmd_mkold(*pmd));
 			goto unlock;
+		}
 
 		page = pmd_page(*pmd);
 		/*
