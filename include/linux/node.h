@@ -189,4 +189,9 @@ static inline int next_demotion_node(int node)
 }
 #endif
 
+static inline bool node_is_toptier(int node)
+{
+	return node_state(node, N_CPU);
+}
+
 #endif /* _LINUX_NODE_H_ */
