@@ -1070,6 +1070,9 @@ unsigned int sysctl_numa_balancing_scan_delay = 1000;
  */
 unsigned int sysctl_numa_balancing_rate_limit;
 
+/* The page with hint page fault latency < threshold in ms is considered hot */
+unsigned int sysctl_numa_balancing_hot_threshold = 1000;
+
 struct numa_group {
 	refcount_t refcount;
 
@@ -1430,6 +1433,43 @@ static bool pgdat_free_space_enough(struct pglist_data *pgdat)
 	return false;
 }
 
+static long numa_hint_fault_latency(struct task_struct *p, unsigned long addr)
+{
+	struct mm_struct *mm = p->mm;
+	unsigned long now = jiffies;
+	unsigned long start, end;
+	int i, j;
+	long latency = 0;
+
+	/*
+	 * Paired with smp_store_release() in task_numa_work() to check
+	 * scan range buffer after get current index
+	 */
+	i = smp_load_acquire(&mm->numa_scan_idx);
+	i = (i - 1) % NUMA_SCAN_NR_HIST;
+
+	end = READ_ONCE(mm->numa_scan_offset);
+	start = READ_ONCE(mm->numa_scan_starts[i]);
+	if (start == end)
+		end = start + MAX_SCAN_WINDOW * (1UL << 22);
+	for (j = 0; j < NUMA_SCAN_NR_HIST; j++) {
+		latency = now - READ_ONCE(mm->numa_scan_jiffies[i]);
+		start = READ_ONCE(mm->numa_scan_starts[i]);
+		/* Scan pass the end of address space */
+		if (end < start)
+			end = TASK_SIZE;
+		if (addr >= start && addr < end)
+			return latency;
+		end = start;
+		i = (i - 1) % NUMA_SCAN_NR_HIST;
+	}
+	/*
+	 * The tracking window isn't large enough, approximate to the
+	 * max latency in the tracking window.
+	 */
+	return latency;
+}
+
 static bool numa_migration_check_rate_limit(struct pglist_data *pgdat,
 					    unsigned long rate_limit, int nr)
 {
@@ -1448,7 +1488,8 @@ static bool numa_migration_check_rate_limit(struct pglist_data *pgdat,
 }
 
 bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
-				int src_nid, int dst_cpu)
+				int src_nid, int dst_cpu, unsigned long addr,
+				int flags)
 {
 	struct numa_group *ng = deref_curr_numa_group(p);
 	int dst_nid = cpu_to_node(dst_cpu);
@@ -1461,11 +1502,20 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 	if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
 	    next_promotion_node(src_nid) != -1) {
 		struct pglist_data *pgdat;
-		unsigned long rate_limit;
+		unsigned long rate_limit, latency, th;
 
 		pgdat = NODE_DATA(dst_nid);
 		if (pgdat_free_space_enough(pgdat))
 			return true;
+
+		/* The page hasn't been accessed in the last scan period */
+		if (!(flags & TNF_YOUNG))
+			return false;
+
+		th = msecs_to_jiffies(sysctl_numa_balancing_hot_threshold);
+		latency = numa_hint_fault_latency(p, addr);
+		if (latency > th)
+			return false;
 
 		rate_limit =
 			sysctl_numa_balancing_rate_limit << (20 - PAGE_SHIFT);
@@ -2540,7 +2590,7 @@ static void reset_ptenuma_scan(struct task_struct *p)
 	 * expensive, to avoid any form of compiler optimizations:
 	 */
 	WRITE_ONCE(p->mm->numa_scan_seq, READ_ONCE(p->mm->numa_scan_seq) + 1);
-	p->mm->numa_scan_offset = 0;
+	WRITE_ONCE(p->mm->numa_scan_offset, 0);
 }
 
 /*
@@ -2557,6 +2607,7 @@ static void task_numa_work(struct callback_head *work)
 	unsigned long start, end;
 	unsigned long nr_pte_updates = 0;
 	long pages, virtpages;
+	int idx;
 
 	SCHED_WARN_ON(p != container_of(work, struct task_struct, numa_work));
 
@@ -2615,6 +2666,15 @@ static void task_numa_work(struct callback_head *work)
 		start = 0;
 		vma = mm->mmap;
 	}
+	idx = mm->numa_scan_idx;
+	WRITE_ONCE(mm->numa_scan_starts[idx], start);
+	WRITE_ONCE(mm->numa_scan_jiffies[idx], jiffies);
+	/*
+	 * Paired with smp_load_acquire() in numa_hint_fault_latency()
+	 * to update scan range buffer index after update the buffer
+	 * contents.
+	 */
+	smp_store_release(&mm->numa_scan_idx, (idx + 1) % NUMA_SCAN_NR_HIST);
 	for (; vma; vma = vma->vm_next) {
 		if (!vma_migratable(vma) || !vma_policy_mof(vma) ||
 			is_vm_hugetlb_page(vma) || (vma->vm_flags & VM_MIXEDMAP)) {
@@ -2642,6 +2702,7 @@ static void task_numa_work(struct callback_head *work)
 			start = max(start, vma->vm_start);
 			end = ALIGN(start + (pages << PAGE_SHIFT), HPAGE_SIZE);
 			end = min(end, vma->vm_end);
+			WRITE_ONCE(mm->numa_scan_offset, end);
 			nr_pte_updates = change_prot_numa(vma, start, end);
 
 			/*
@@ -2671,9 +2732,7 @@ out:
 	 * would find the !migratable VMA on the next scan but not reset the
 	 * scanner to the start so check it now.
 	 */
-	if (vma)
-		mm->numa_scan_offset = start;
-	else
+	if (!vma)
 		reset_ptenuma_scan(p);
 	up_read(&mm->mmap_sem);
 
@@ -2691,7 +2750,7 @@ out:
 
 void init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
 {
-	int mm_users = 0;
+	int i, mm_users = 0;
 	struct mm_struct *mm = p->mm;
 
 	if (mm) {
@@ -2699,6 +2758,11 @@ void init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
 		if (mm_users == 1) {
 			mm->numa_next_scan = jiffies + msecs_to_jiffies(sysctl_numa_balancing_scan_delay);
 			mm->numa_scan_seq = 0;
+			mm->numa_scan_idx = 0;
+			for (i = 0; i < NUMA_SCAN_NR_HIST; i++) {
+				mm->numa_scan_jiffies[i] = 0;
+				mm->numa_scan_starts[i] = 0;
+			}
 		}
 	}
 	p->node_stamp			= 0;

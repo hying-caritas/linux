@@ -3789,7 +3789,7 @@ static int numa_migrate_prep(struct page *page, struct vm_area_struct *vma,
 		*flags |= TNF_FAULT_LOCAL;
 	}
 
-	return mpol_misplaced(page, vma, addr);
+	return mpol_misplaced(page, vma, addr, *flags);
 }
 
 static vm_fault_t do_numa_page(struct vm_fault *vmf)
@@ -3826,9 +3826,8 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	ptep_modify_prot_commit(vma, vmf->address, vmf->pte, old_pte, pte);
 	update_mmu_cache(vma, vmf->address, vmf->pte);
 
-	/* Only migrate if accessed twice */
-	if (!pte_young(old_pte))
-		goto unmap_out;
+	if (pte_young(old_pte))
+		flags |= TNF_YOUNG;
 
 	page = vm_normal_page(vma, vmf->address, pte);
 	if (!page)

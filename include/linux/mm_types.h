@@ -508,6 +508,15 @@ struct mm_struct {
 
 		/* numa_scan_seq prevents two threads setting pte_numa */
 		int numa_scan_seq;
+
+		/*
+		 * Keep 1600ms history of NUMA scanning, when default
+		 * 100ms minimal scanning interval is used.
+		 */
+#define NUMA_SCAN_NR_HIST	16
+		int numa_scan_idx;
+		unsigned long numa_scan_jiffies[NUMA_SCAN_NR_HIST];
+		unsigned long numa_scan_starts[NUMA_SCAN_NR_HIST];
 #endif
 		/*
 		 * An operation with batched TLB flushing is going on. Anything

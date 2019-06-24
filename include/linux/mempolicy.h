@@ -202,7 +202,8 @@ static inline bool vma_migratable(struct vm_area_struct *vma)
 	return true;
 }
 
-extern int mpol_misplaced(struct page *, struct vm_area_struct *, unsigned long);
+extern int mpol_misplaced(struct page *, struct vm_area_struct *, unsigned long,
+			  int flags);
 extern void mpol_put_task_policy(struct task_struct *);
 
 #else
@@ -300,7 +301,7 @@ static inline int mpol_parse_str(char *str, struct mempolicy **mpol)
 #endif
 
 static inline int mpol_misplaced(struct page *page, struct vm_area_struct *vma,
-				 unsigned long address)
+				 unsigned long address, int flags)
 {
 	return -1; /* no node preference */
 }
