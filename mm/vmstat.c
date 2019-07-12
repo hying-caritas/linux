@@ -1203,6 +1203,9 @@ const char * const vmstat_text[] = {
 	"nr_dirtied",
 	"nr_written",
 	"nr_kernel_misc_reclaimable",
+#ifdef CONFIG_NUMA_BALANCING
+	"numa_try_migrate",
+#endif
 
 	/* enum writeback_stat_item counters */
 	"nr_dirty_threshold",
