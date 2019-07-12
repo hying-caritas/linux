@@ -1172,6 +1172,9 @@ const char * const vmstat_text[] = {
 	"nr_kernel_misc_reclaimable",
 	"nr_foll_pin_acquired",
 	"nr_foll_pin_released",
+#ifdef CONFIG_NUMA_BALANCING
+	"numa_nr_candidate",
+#endif
 
 	/* enum writeback_stat_item counters */
 	"nr_dirty_threshold",
