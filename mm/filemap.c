@@ -3637,7 +3637,8 @@ find_page:
 	if (page) {
 		wait_for_stable_page(page);
 
-		if (!promotion_tried && promote_file_page(page, PFP_LOCKED)) {
+		if (!promotion_tried &&
+		    promote_file_page(page, PFP_LOCKED | PFP_WRITE)) {
 			promotion_tried = true;
 			goto find_page;
 		}

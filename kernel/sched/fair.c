@@ -1527,7 +1527,7 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 }
 
 bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
-				int src_nid, int dst_cpu)
+				int src_nid, int dst_cpu, int flags)
 {
 	struct numa_group *ng = deref_curr_numa_group(p);
 	int dst_nid = cpu_to_node(dst_cpu);
@@ -1552,6 +1552,8 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 		numa_migration_adjust_threshold(pgdat, rate_limit, def_th);
 
 		th = pgdat->numa_threshold ? : def_th;
+		if (flags & TNF_WRITE)
+			th *= 2;
 		latency = numa_hint_fault_latency(page);
 		if (latency > th)
 			return false;
