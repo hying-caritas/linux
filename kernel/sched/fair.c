@@ -1513,6 +1513,8 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 			return false;
 
 		th = msecs_to_jiffies(sysctl_numa_balancing_hot_threshold);
+		if (flags & TNF_WRITE)
+			th *= 2;
 		latency = numa_hint_fault_latency(p, addr);
 		if (latency > th)
 			return false;

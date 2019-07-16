@@ -3829,6 +3829,9 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	if (pte_young(old_pte))
 		flags |= TNF_YOUNG;
 
+	if (vmf->flags & FAULT_FLAG_WRITE)
+		flags |= TNF_WRITE;
+
 	page = vm_normal_page(vma, vmf->address, pte);
 	if (!page)
 		goto unmap_out;
