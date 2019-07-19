@@ -1487,6 +1487,35 @@ static bool numa_migration_check_rate_limit(struct pglist_data *pgdat,
 	return true;
 }
 
+#define NUMA_MIGRATION_ADJUST_STEPS	16
+
+static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
+					    unsigned long rate_limit,
+					    unsigned long ref_th)
+{
+	unsigned long now = jiffies, last_th_ts, th_period;
+	unsigned long unit_th, th;
+	unsigned long try, ref_try, tdiff;
+
+	th_period = msecs_to_jiffies(sysctl_numa_balancing_scan_period_max);
+	last_th_ts = pgdat->numa_threshold_ts;
+	if (now > last_th_ts + th_period &&
+	    cmpxchg(&pgdat->numa_threshold_ts, last_th_ts, now) == last_th_ts) {
+		ref_try = rate_limit *
+			sysctl_numa_balancing_scan_period_max / 1000;
+		try = node_page_state(pgdat, NUMA_TRY_MIGRATE);
+		tdiff = try - pgdat->numa_threshold_try;
+		unit_th = ref_th / NUMA_MIGRATION_ADJUST_STEPS;
+		th = pgdat->numa_threshold ? : ref_th;
+		if (tdiff > ref_try * 11 / 10)
+			th = max(th - unit_th, unit_th);
+		else if (tdiff < ref_try * 9 / 10)
+			th = min(th + unit_th, ref_th);
+		pgdat->numa_threshold_try = try;
+		pgdat->numa_threshold = th;
+	}
+}
+
 bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 				int src_nid, int dst_cpu, unsigned long addr,
 				int flags)
@@ -1502,7 +1531,7 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 	if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
 	    next_promotion_node(src_nid) != -1) {
 		struct pglist_data *pgdat;
-		unsigned long rate_limit, latency, th;
+		unsigned long rate_limit, latency, th, def_th;
 
 		pgdat = NODE_DATA(dst_nid);
 		if (pgdat_free_space_enough(pgdat))
@@ -1512,15 +1541,18 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 		if (!(flags & TNF_YOUNG))
 			return false;
 
-		th = msecs_to_jiffies(sysctl_numa_balancing_hot_threshold);
+		def_th = msecs_to_jiffies(sysctl_numa_balancing_hot_threshold);
+		rate_limit =
+			sysctl_numa_balancing_rate_limit << (20 - PAGE_SHIFT);
+		numa_migration_adjust_threshold(pgdat, rate_limit, def_th);
+
+		th = pgdat->numa_threshold ? : def_th;
 		if (flags & TNF_WRITE)
 			th *= 2;
 		latency = numa_hint_fault_latency(p, addr);
 		if (latency > th)
 			return false;
 
-		rate_limit =
-			sysctl_numa_balancing_rate_limit << (20 - PAGE_SHIFT);
 		return numa_migration_check_rate_limit(pgdat, rate_limit,
 						       hpage_nr_pages(page));
 	}
