@@ -135,6 +135,30 @@ TRACE_EVENT(sched_kthread_work_execute_end,
 	TP_printk("work struct %p: function %ps", __entry->work, __entry->function)
 );
 
+TRACE_EVENT(autonuma_threshold,
+
+	TP_PROTO(int nid,
+		 long nr_candidate,
+		 int threshold),
+
+	TP_ARGS(nid, nr_candidate, threshold),
+
+	TP_STRUCT__entry(
+		__field(	int,	nid		)
+		__field(	long,	nr_candidate	)
+		__field(	int,	threshold	)
+	),
+
+	TP_fast_assign(
+		__entry->nid		= nid;
+		__entry->nr_candidate	= nr_candidate;
+		__entry->threshold	= threshold;
+	),
+
+	TP_printk("nid=%d nr_candidate=%ld threshold=%d",
+		  __entry->nid, __entry->nr_candidate, __entry->threshold)
+);
+
 /*
  * Tracepoint for waking up a task:
  */

@@ -1502,6 +1502,7 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 			th = min(th + unit_th, ref_th);
 		pgdat->numa_threshold_nr_candidate = nr_cand;
 		pgdat->numa_threshold = th;
+		trace_autonuma_threshold(pgdat->node_id, diff_cand, th);
 	}
 }
 
