@@ -1759,6 +1759,15 @@ static struct ctl_table kern_table[] = {
 		.extra2		= &three,
 	},
 	{
+		.procname	= "numa_balancing_scan_async",
+		.data		= &sysctl_numa_balancing_scan_async,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_ONE,
+	},
+	{
 		.procname	= "numa_balancing_hot_threshold_ms",
 		.data		= &sysctl_numa_balancing_hot_threshold,
 		.maxlen		= sizeof(unsigned int),

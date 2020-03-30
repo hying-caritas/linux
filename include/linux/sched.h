@@ -1163,6 +1163,7 @@ struct task_struct {
 	u64				last_task_numa_placement;
 	u64				last_sum_exec_runtime;
 	struct callback_head		numa_work;
+	struct work_struct		numa_async_work;
 
 	/*
 	 * This pointer is only modified for current in syscall and

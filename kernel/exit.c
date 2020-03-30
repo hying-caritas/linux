@@ -809,6 +809,9 @@ void __noreturn do_exit(long code)
 	tsk->exit_code = code;
 	taskstats_exit(tsk, group_dead);
 
+#ifdef CONFIG_NUMA_BALANCING
+	cancel_work_sync(&tsk->numa_async_work);
+#endif
 	exit_mm();
 
 	if (group_dead)

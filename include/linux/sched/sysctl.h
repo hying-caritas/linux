@@ -65,6 +65,8 @@ extern unsigned int sysctl_numa_balancing_force_enable;
 #define sysctl_numa_balancing_force_enable	0
 #endif
 
+extern unsigned int sysctl_numa_balancing_scan_async;
+
 #ifdef CONFIG_SCHED_DEBUG
 extern __read_mostly unsigned int sysctl_sched_migration_cost;
 extern __read_mostly unsigned int sysctl_sched_nr_migrate;
