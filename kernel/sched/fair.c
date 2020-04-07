@@ -1466,8 +1466,8 @@ static int numa_hint_fault_latency(struct page *page)
 static bool numa_migration_check_rate_limit(struct pglist_data *pgdat,
 					    unsigned long rate_limit, int nr)
 {
-	unsigned long nr_candidate;
-	unsigned long now = jiffies, last_ts;
+	unsigned long nr_candidate, try;
+	unsigned long now = jiffies, last_ts, dms;
 
 	mod_node_page_state(pgdat, PGPROMOTE_CANDIDATE, nr);
 	nr_candidate = node_page_state(pgdat, PGPROMOTE_CANDIDATE);
@@ -1475,8 +1475,13 @@ static bool numa_migration_check_rate_limit(struct pglist_data *pgdat,
 	if (now > last_ts + HZ &&
 	    cmpxchg(&pgdat->numa_ts, last_ts, now) == last_ts)
 		pgdat->numa_nr_candidate = nr_candidate;
-	if (nr_candidate - pgdat->numa_nr_candidate > rate_limit)
+	if (nr_candidate - pgdat->numa_nr_candidate > 5 * rate_limit)
 		return false;
+	try = node_page_state(pgdat, PGPROMOTE_TRY);
+	dms = jiffies_to_msecs(now - pgdat->numa_threshold_ts);
+	if (try - pgdat->numa_threshold_try > rate_limit * dms / 1000)
+		return false;
+	mod_node_page_state(pgdat, PGPROMOTE_TRY, nr);
 	return true;
 }
 
@@ -1513,6 +1518,8 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 			th = min(th, ref_th * 2);
 		}
 		pgdat->numa_threshold = th;
+		pgdat->numa_threshold_try =
+			node_page_state(pgdat, PGPROMOTE_TRY);
 		spin_unlock(&pgdat->numa_lock);
 		trace_autonuma_threshold(pgdat->node_id, diff_cand, th);
 		mod_node_page_state(pgdat, PROMOTE_THRESHOLD, th - oth);
