@@ -1480,14 +1480,12 @@ static bool numa_migration_check_rate_limit(struct pglist_data *pgdat,
 	return true;
 }
 
-#define NUMA_MIGRATION_ADJUST_STEPS	16
-
 static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 					    unsigned long rate_limit,
 					    unsigned long ref_th)
 {
 	unsigned long now = jiffies, last_th_ts, th_period;
-	unsigned long unit_th, th, oth;
+	unsigned long th, oth;
 	unsigned long last_nr_cand, nr_cand, ref_cand, diff_cand;
 
 	th_period = msecs_to_jiffies(sysctl_numa_balancing_scan_period_max);
@@ -1505,13 +1503,15 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 		}
 		pgdat->numa_threshold_ts = now;
 		pgdat->numa_threshold_nr_candidate = nr_cand;
-		unit_th = ref_th / NUMA_MIGRATION_ADJUST_STEPS;
 		oth = pgdat->numa_threshold;
 		th = oth ? : ref_th;
-		if (diff_cand > ref_cand * 11 / 10)
-			th = max(th - unit_th, unit_th);
-		else if (diff_cand < ref_cand * 9 / 10)
-			th = min(th + unit_th, ref_th);
+		if (diff_cand > ref_cand * 11 / 10) {
+			th = min(th * 9 / 10, th - 1);
+			th = max(th, 1UL);
+		} else if (diff_cand < ref_cand * 9 / 10) {
+			th = max(th * 11 / 10, th + 1);
+			th = min(th, ref_th * 2);
+		}
 		pgdat->numa_threshold = th;
 		spin_unlock(&pgdat->numa_lock);
 		trace_autonuma_threshold(pgdat->node_id, diff_cand, th);
