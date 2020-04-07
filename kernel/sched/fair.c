@@ -1488,16 +1488,23 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 {
 	unsigned long now = jiffies, last_th_ts, th_period;
 	unsigned long unit_th, th, oth;
-	unsigned long nr_cand, ref_cand, diff_cand;
+	unsigned long last_nr_cand, nr_cand, ref_cand, diff_cand;
 
 	th_period = msecs_to_jiffies(sysctl_numa_balancing_scan_period_max);
 	last_th_ts = pgdat->numa_threshold_ts;
-	if (now > last_th_ts + th_period &&
-	    cmpxchg(&pgdat->numa_threshold_ts, last_th_ts, now) == last_th_ts) {
-		ref_cand = rate_limit *
-			sysctl_numa_balancing_scan_period_max / 1000;
-		nr_cand = node_page_state(pgdat, PGPROMOTE_CANDIDATE);
-		diff_cand = nr_cand - pgdat->numa_threshold_nr_candidate;
+	ref_cand = rate_limit * sysctl_numa_balancing_scan_period_max / 1000;
+	nr_cand = node_page_state(pgdat, PGPROMOTE_CANDIDATE);
+	last_nr_cand = pgdat->numa_threshold_nr_candidate;
+	diff_cand = nr_cand - last_nr_cand;
+	if ((now > last_th_ts + th_period || diff_cand > ref_cand * 11 / 10)) {
+		spin_lock(&pgdat->numa_lock);
+		if (pgdat->numa_threshold_ts != last_th_ts ||
+		    pgdat->numa_threshold_nr_candidate != last_nr_cand) {
+			spin_unlock(&pgdat->numa_lock);
+			return;
+		}
+		pgdat->numa_threshold_ts = now;
+		pgdat->numa_threshold_nr_candidate = nr_cand;
 		unit_th = ref_th / NUMA_MIGRATION_ADJUST_STEPS;
 		oth = pgdat->numa_threshold;
 		th = oth ? : ref_th;
@@ -1505,8 +1512,8 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 			th = max(th - unit_th, unit_th);
 		else if (diff_cand < ref_cand * 9 / 10)
 			th = min(th + unit_th, ref_th);
-		pgdat->numa_threshold_nr_candidate = nr_cand;
 		pgdat->numa_threshold = th;
+		spin_unlock(&pgdat->numa_lock);
 		trace_autonuma_threshold(pgdat->node_id, diff_cand, th);
 		mod_node_page_state(pgdat, PROMOTE_THRESHOLD, th - oth);
 	}

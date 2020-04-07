@@ -852,6 +852,7 @@ typedef struct pglist_data {
 #endif
 
 #ifdef CONFIG_NUMA_BALANCING
+	spinlock_t    numa_lock;
 	unsigned long numa_ts;
 	unsigned long numa_nr_candidate;
 	unsigned long numa_threshold_ts;
