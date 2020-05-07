@@ -62,6 +62,7 @@
 #include <linux/tracehook.h>
 #include <linux/psi.h>
 #include <linux/seq_buf.h>
+#include <linux/migrate.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>
@@ -3245,6 +3246,7 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 	struct mem_cgroup_tree_per_node *mctz;
 	unsigned long excess;
 	unsigned long nr_scanned;
+	int migration_nid;
 
 	if (order > 0)
 		return 0;
@@ -3258,6 +3260,23 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 	 */
 	if (!mctz || RB_EMPTY_ROOT(&mctz->rb_root))
 		return 0;
+
+	/*
+	 * Try to reclaim from the slow memory node if possible, to
+	 * reclaim instead of demote and to reclaim the colder pages
+	 * firstly.
+	 */
+	migration_nid = next_demotion_node(pgdat->node_id);
+	if (migration_nid != -1) {
+		struct mem_cgroup_tree_per_node *mmctz;
+
+		mmctz = soft_limit_tree_node(migration_nid);
+		if (mmctz && !RB_EMPTY_ROOT(&mmctz->rb_root)) {
+			pgdat = NODE_DATA(migration_nid);
+			return mem_cgroup_soft_limit_reclaim(pgdat, order,
+				gfp_mask, total_scanned);
+		}
+	}
 
 	/*
 	 * This loop can run a while, specially if mem_cgroup's continuously
