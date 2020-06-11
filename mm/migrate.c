@@ -1226,6 +1226,33 @@ int next_demotion_node(int node)
 }
 
 /*
+ * Return true if the caller has lost the reference to the page,
+ * otherwise return false.
+ */
+bool promote_file_page(struct page *page, int flags)
+{
+	int nid = page_to_nid(page);
+
+	if (!(sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING) ||
+	    node_is_toptier(nid))
+		return false;
+
+	nid = mpol_misplaced(page, NULL, 0);
+	if (nid == NUMA_NO_NODE)
+		return false;
+
+	if (!PageLRU(page))
+		return false;
+
+	if (flags & PFP_LOCKED)
+		unlock_page(page);
+
+	migrate_misplaced_page(page, NULL, nid);
+
+	return true;
+}
+
+/*
  * Obtain the lock on page, remove all ptes and migrate the page
  * to the newly allocated page in newpage.
  */

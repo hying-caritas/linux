@@ -32,6 +32,9 @@ enum migrate_reason {
 	MR_TYPES
 };
 
+/*  promote_file_page() flags */
+#define PFP_LOCKED		0x1
+
 /* In mm/debug.c; also keep sync with include/trace/events/migrate.h */
 extern const char *migrate_reason_names[MR_TYPES];
 
@@ -53,6 +56,7 @@ extern int migrate_huge_page_move_mapping(struct address_space *mapping,
 				  struct page *newpage, struct page *page);
 extern int migrate_page_move_mapping(struct address_space *mapping,
 		struct page *newpage, struct page *page, int extra_count);
+extern bool promote_file_page(struct page *page, int flags);
 #else
 
 static inline void putback_movable_pages(struct list_head *l) {}
@@ -79,6 +83,10 @@ static inline int migrate_huge_page_move_mapping(struct address_space *mapping,
 	return -ENOSYS;
 }
 
+static inline bool promote_file_page(struct page *page, int flags)
+{
+	return false;
+}
 #endif /* CONFIG_MIGRATION */
 
 #ifdef CONFIG_COMPACTION

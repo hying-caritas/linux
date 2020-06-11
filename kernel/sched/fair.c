@@ -1456,6 +1456,10 @@ static int numa_hint_fault_latency(struct page *page)
 	time = jiffies_to_msecs(jiffies);
 	last_time = xchg_page_access_time(page, time);
 
+	/* First access */
+	if (last_time == PAGE_ACCESS_TIME_MASK)
+		return PAGE_ACCESS_TIME_MASK;
+
 	return (time - last_time) & PAGE_ACCESS_TIME_MASK;
 }
 
