@@ -327,9 +327,8 @@ static void __activate_page(struct page *page, struct lruvec *lruvec)
 		add_page_to_lru_list(page, lruvec);
 		trace_mm_lru_activate(page);
 
-		__count_vm_events(PGACTIVATE, nr_pages);
-		__count_memcg_events(lruvec_memcg(lruvec), PGACTIVATE,
-				     nr_pages);
+		__mod_node_page_state(page_pgdat(page), PGACTIVATE, nr_pages);
+		__mod_memcg_state(lruvec_memcg(lruvec), PGACTIVATE, nr_pages);
 	}
 }
 
@@ -561,9 +560,8 @@ static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec)
 	}
 
 	if (active) {
-		__count_vm_events(PGDEACTIVATE, nr_pages);
-		__count_memcg_events(lruvec_memcg(lruvec), PGDEACTIVATE,
-				     nr_pages);
+		__mod_node_page_state(page_pgdat(page), PGDEACTIVATE, nr_pages);
+		__mod_memcg_state(lruvec_memcg(lruvec), PGDEACTIVATE, nr_pages);
 	}
 }
 
@@ -577,9 +575,8 @@ static void lru_deactivate_fn(struct page *page, struct lruvec *lruvec)
 		ClearPageReferenced(page);
 		add_page_to_lru_list(page, lruvec);
 
-		__count_vm_events(PGDEACTIVATE, nr_pages);
-		__count_memcg_events(lruvec_memcg(lruvec), PGDEACTIVATE,
-				     nr_pages);
+		__mod_node_page_state(page_pgdat(page), PGDEACTIVATE, nr_pages);
+		__mod_memcg_state(lruvec_memcg(lruvec), PGDEACTIVATE, nr_pages);
 	}
 }
 
