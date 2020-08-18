@@ -147,6 +147,7 @@ struct scan_control {
 		unsigned int immediate;
 		unsigned int file_taken;
 		unsigned int taken;
+		unsigned int demoted;
 	} nr;
 
 	/* for recording the reclaimed slab by now */
@@ -1145,6 +1146,11 @@ static unsigned int demote_page_list(struct list_head *ret_list,
 		putback_movable_pages(demote_pages);
 		list_splice(ret_list, demote_pages);
 	}
+
+	if (current_is_kswapd())
+		__count_vm_events(PGDEMOTE_KSWAPD, nr_succeeded);
+	else
+		__count_vm_events(PGDEMOTE_DIRECT, nr_succeeded);
 
 	return nr_succeeded;
 }
