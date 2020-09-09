@@ -1336,6 +1336,7 @@ static unsigned int demote_page_list(struct list_head *demote_pages,
 	int target_nid = next_demotion_node(pgdat->node_id);
 	unsigned int nr_succeeded;
 	int err;
+	bool file_lru;
 
 	if (list_empty(demote_pages))
 		return 0;
@@ -1343,6 +1344,7 @@ static unsigned int demote_page_list(struct list_head *demote_pages,
 	if (target_nid == NUMA_NO_NODE)
 		return 0;
 
+	file_lru = page_is_file_lru(lru_to_page(demote_pages));
 	/* Demotion ignores all cpuset and mempolicy settings */
 	err = migrate_pages(demote_pages, alloc_demote_page, NULL,
 			    target_nid, MIGRATE_ASYNC, MR_DEMOTION,
@@ -1352,6 +1354,8 @@ static unsigned int demote_page_list(struct list_head *demote_pages,
 		__count_vm_events(PGDEMOTE_KSWAPD, nr_succeeded);
 	else
 		__count_vm_events(PGDEMOTE_DIRECT, nr_succeeded);
+	if (file_lru)
+		__count_vm_events(PGDEMOTE_FILE, nr_succeeded);
 
 	return nr_succeeded;
 }
