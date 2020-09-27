@@ -2470,6 +2470,8 @@ int mpol_misplaced(struct page *page, struct vm_area_struct *vma, unsigned long 
 	int polnid = NUMA_NO_NODE;
 	int ret = -1;
 
+	if (test_and_clear_page_demoted(page))
+		flags |= TNF_DEMOTED;
 	pol = get_vma_policy(vma, addr);
 	if (!(pol->flags & MPOL_F_MOF))
 		goto out;

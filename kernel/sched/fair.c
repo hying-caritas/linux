@@ -1558,6 +1558,9 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 		if (latency > th)
 			return false;
 
+		if (flags & TNF_DEMOTED)
+			mod_node_page_state(pgdat, PGPROMOTE_DEMOTED,
+					    thp_nr_pages(page));
 		return numa_migration_check_rate_limit(pgdat, rate_limit,
 						       thp_nr_pages(page));
 	}
