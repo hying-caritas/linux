@@ -1490,7 +1490,7 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 					    unsigned long ref_th)
 {
 	unsigned long now = jiffies, last_th_ts, th_period;
-	unsigned long th, oth;
+	unsigned long th, oth, nr_demoted, nr_pdemoted;
 	unsigned long last_nr_cand, nr_cand, ref_cand, diff_cand;
 
 	th_period = msecs_to_jiffies(sysctl_numa_balancing_scan_period_max);
@@ -1517,11 +1517,29 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 			th = max(th * 11 / 10, th + 1);
 			th = min(th, ref_th * 2);
 		}
+		nr_demoted = node_page_state(pgdat, PGDEMOTE_KSWAPD) +
+			node_page_state(pgdat, PGDEMOTE_DIRECT);
+		nr_pdemoted = node_page_state(pgdat, PGPROMOTE_DEMOTED);
+		if (nr_pdemoted - pgdat->numa_threshold_pdemoted >
+		    (nr_demoted - pgdat->numa_threshold_demoted) / 4) {
+			rate_limit = min(rate_limit * 9 / 10, rate_limit - 1);
+			rate_limit = max(rate_limit, 1UL);
+		} else {
+			unsigned long ref_rl;
+
+			ref_rl = sysctl_numa_balancing_rate_limit << (20 - PAGE_SHIFT);
+			rate_limit = max(rate_limit * 11 / 10, rate_limit + 1);
+			rate_limit = min(rate_limit, ref_rl);
+		}
+		pgdat->numa_rate_limit = rate_limit;
 		pgdat->numa_threshold = th;
 		pgdat->numa_threshold_try =
 			node_page_state(pgdat, PGPROMOTE_TRY);
+		pgdat->numa_threshold_demoted = nr_demoted;
+		pgdat->numa_threshold_pdemoted = nr_pdemoted;
 		spin_unlock(&pgdat->numa_lock);
-		trace_autonuma_threshold(pgdat->node_id, diff_cand, th);
+		trace_autonuma_threshold(pgdat->node_id, diff_cand, th,
+					 pgdat->numa_rate_limit);
 		mod_node_page_state(pgdat, PROMOTE_THRESHOLD, th - oth);
 	}
 }
@@ -1547,7 +1565,8 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 			return true;
 
 		def_th = sysctl_numa_balancing_hot_threshold;
-		rate_limit =
+		rate_limit = pgdat->numa_rate_limit;
+		rate_limit = rate_limit ? :
 			sysctl_numa_balancing_rate_limit << (20 - PAGE_SHIFT);
 		numa_migration_adjust_threshold(pgdat, rate_limit, def_th);
 

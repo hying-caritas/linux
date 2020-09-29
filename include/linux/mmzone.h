@@ -875,6 +875,9 @@ typedef struct pglist_data {
 	unsigned long numa_threshold_nr_candidate;
 	unsigned long numa_threshold_try;
 	unsigned long numa_threshold;
+	unsigned long numa_threshold_demoted;
+	unsigned long numa_threshold_pdemoted;
+	unsigned long numa_rate_limit;
 #endif
 	/* Fields commonly accessed by the page reclaim scanner */
 

@@ -139,24 +139,28 @@ TRACE_EVENT(autonuma_threshold,
 
 	TP_PROTO(int nid,
 		 long nr_candidate,
-		 int threshold),
+		 int threshold,
+		 int ratelimit),
 
-	TP_ARGS(nid, nr_candidate, threshold),
+	TP_ARGS(nid, nr_candidate, threshold, ratelimit),
 
 	TP_STRUCT__entry(
 		__field(	int,	nid		)
 		__field(	long,	nr_candidate	)
 		__field(	int,	threshold	)
+		__field(	int,	ratelimit	)
 	),
 
 	TP_fast_assign(
 		__entry->nid		= nid;
 		__entry->nr_candidate	= nr_candidate;
 		__entry->threshold	= threshold;
+		__entry->ratelimit	= ratelimit;
 	),
 
-	TP_printk("nid=%d nr_candidate=%ld threshold=%d",
-		  __entry->nid, __entry->nr_candidate, __entry->threshold)
+	TP_printk("nid=%d nr_candidate=%ld threshold=%d ratelimit=%d",
+		  __entry->nid, __entry->nr_candidate, __entry->threshold,
+		  __entry->ratelimit)
 );
 
 /*
