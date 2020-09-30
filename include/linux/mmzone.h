@@ -212,6 +212,7 @@ enum node_stat_item {
 #ifdef CONFIG_NUMA_BALANCING
 	PGPROMOTE_SUCCESS,	/* promote successfully */
 	PGPROMOTE_CANDIDATE,	/* candidate pages to promote */
+	PROMOTE_THRESHOLD,
 #endif
 	NR_VM_NODE_STAT_ITEMS
 };

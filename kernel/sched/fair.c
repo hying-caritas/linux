@@ -1483,7 +1483,7 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 					    unsigned long ref_th)
 {
 	unsigned long now = jiffies, last_th_ts, th_period;
-	unsigned long unit_th, th;
+	unsigned long unit_th, th, oth;
 	unsigned long nr_cand, ref_cand, diff_cand;
 
 	th_period = msecs_to_jiffies(sysctl_numa_balancing_scan_period_max);
@@ -1495,7 +1495,8 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 		nr_cand = node_page_state(pgdat, PGPROMOTE_CANDIDATE);
 		diff_cand = nr_cand - pgdat->numa_threshold_nr_candidate;
 		unit_th = ref_th / NUMA_MIGRATION_ADJUST_STEPS;
-		th = pgdat->numa_threshold ? : ref_th;
+		oth = pgdat->numa_threshold;
+		th = oth ? : ref_th;
 		if (diff_cand > ref_cand * 11 / 10)
 			th = max(th - unit_th, unit_th);
 		else if (diff_cand < ref_cand * 9 / 10)
@@ -1503,6 +1504,7 @@ static void numa_migration_adjust_threshold(struct pglist_data *pgdat,
 		pgdat->numa_threshold_nr_candidate = nr_cand;
 		pgdat->numa_threshold = th;
 		trace_autonuma_threshold(pgdat->node_id, diff_cand, th);
+		mod_node_page_state(pgdat, PROMOTE_THRESHOLD, th - oth);
 	}
 }
 
