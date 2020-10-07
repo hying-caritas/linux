@@ -203,6 +203,7 @@ extern int user_min_free_kbytes;
 
 extern void zone_pcp_update(struct zone *zone);
 extern void zone_pcp_reset(struct zone *zone);
+extern int find_next_best_node(int node, nodemask_t *used_node_mask);
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 
