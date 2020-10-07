@@ -291,8 +291,11 @@ static bool writeback_throttling_sane(struct scan_control *sc)
 #endif
 
 static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
-					  int node_id)
+					  int node_id,
+					  struct scan_control *sc)
 {
+	bool in_cgroup_reclaim = false;
+
 	/* Always age anon pages when we have swap */
 	if (memcg == NULL) {
 		if (get_nr_swap_pages() > 0)
@@ -302,8 +305,18 @@ static inline bool can_reclaim_anon_pages(struct mem_cgroup *memcg,
 			return true;
 	}
 
-	/* Also age anon pages if we can auto-migrate them */
-	if (next_demotion_node(node_id) >= 0)
+	/* Can only be in memcg reclaim in paths with valid 'sc': */
+	if (sc && cgroup_reclaim(sc))
+		in_cgroup_reclaim = true;
+
+	/*
+	 * Also age anon pages if we can auto-migrate them.
+	 *
+	 * Migrating a page does not reduce comsumption of a
+	 * memcg so should not be performed when in memcg
+	 * reclaim.
+	 */
+	if (!in_cgroup_reclaim && (next_demotion_node(node_id) >= 0))
 		return true;
 
 	/* No way to reclaim anon pages */
@@ -321,7 +334,7 @@ unsigned long zone_reclaimable_pages(struct zone *zone)
 
 	nr = zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_FILE) +
 		zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_FILE);
-	if (can_reclaim_anon_pages(NULL, zone_to_nid(zone)))
+	if (can_reclaim_anon_pages(NULL, zone_to_nid(zone), NULL))
 		nr += zone_page_state_snapshot(zone, NR_ZONE_INACTIVE_ANON) +
 			zone_page_state_snapshot(zone, NR_ZONE_ACTIVE_ANON);
 
@@ -1063,6 +1076,10 @@ bool migrate_demote_page_ok(struct page *page, struct scan_control *sc)
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(PageHuge(page), page);
 	VM_BUG_ON_PAGE(PageLRU(page), page);
+
+	/* It is pointless to do demotion in memcg reclaim */
+	if (cgroup_reclaim(sc))
+		return false;
 
 	if (next_nid == NUMA_NO_NODE)
 		return false;
@@ -2368,7 +2385,7 @@ static void get_scan_count(struct lruvec *lruvec, struct scan_control *sc,
 	enum lru_list lru;
 
 	/* If we have no swap space, do not bother scanning anon pages. */
-	if (!sc->may_swap || !can_reclaim_anon_pages(memcg, pgdat->node_id)) {
+	if (!sc->may_swap || !can_reclaim_anon_pages(memcg, pgdat->node_id, sc)) {
 		scan_balance = SCAN_FILE;
 		goto out;
 	}
@@ -2653,7 +2670,7 @@ static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
 	 * rebalance the anon lru active/inactive ratio.
 	 */
 	if (can_reclaim_anon_pages(lruvec_memcg(lruvec),
-			       lruvec_pgdat(lruvec)->node_id) &&
+			       lruvec_pgdat(lruvec)->node_id, sc) &&
 	    inactive_is_low(lruvec, LRU_INACTIVE_ANON))
 		shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
 				   sc, LRU_ACTIVE_ANON);
@@ -2724,7 +2741,7 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 	 */
 	pages_for_compaction = compact_gap(sc->order);
 	inactive_lru_pages = node_page_state(pgdat, NR_INACTIVE_FILE);
-	if (can_reclaim_anon_pages(NULL, pgdat->node_id))
+	if (can_reclaim_anon_pages(NULL, pgdat->node_id, sc))
 		inactive_lru_pages += node_page_state(pgdat, NR_INACTIVE_ANON);
 
 	return inactive_lru_pages > pages_for_compaction;
@@ -3483,7 +3500,7 @@ static void age_active_anon(struct pglist_data *pgdat,
 	struct mem_cgroup *memcg;
 	struct lruvec *lruvec;
 
-	if (!can_reclaim_anon_pages(NULL, pgdat->node_id))
+	if (!can_reclaim_anon_pages(NULL, pgdat->node_id, sc))
 		return;
 
 	lruvec = mem_cgroup_lruvec(NULL, pgdat);
