@@ -1526,7 +1526,7 @@ retry:
 			case MIGRATEPAGE_SUCCESS:
 				if (is_thp) {
 					nr_thp_succeeded++;
-					nr_succeeded += nr_subpages;
+					*nr_succeeded += nr_subpages;
 					break;
 				}
 				(*nr_succeeded)++;
