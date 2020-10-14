@@ -1247,7 +1247,13 @@ bool promote_file_page(struct page *page, int flags)
 	if (flags & PFP_LOCKED)
 		unlock_page(page);
 
-	migrate_misplaced_page(page, NULL, nid);
+	if (migrate_misplaced_page(page, NULL, nid)) {
+#ifdef CONFIG_NUMA_BALANCING
+		mod_node_page_state(NODE_DATA(nid), PGPROMOTE_FILE, 1);
+#else
+		;
+#endif
+	}
 
 	return true;
 }

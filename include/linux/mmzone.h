@@ -213,6 +213,7 @@ enum node_stat_item {
 	PGPROMOTE_SUCCESS,	/* promote successfully */
 	PGPROMOTE_CANDIDATE,	/* candidate pages to promote */
 	PROMOTE_THRESHOLD,
+	PGPROMOTE_FILE,
 #endif
 	NR_VM_NODE_STAT_ITEMS
 };
