@@ -3825,6 +3825,13 @@ static const unsigned int memcg1_stats[] = {
 	NR_FILE_MAPPED,
 	NR_FILE_DIRTY,
 	NR_WRITEBACK,
+	PGSTEAL_KSWAPD,
+	PGSTEAL_DIRECT,
+	PGDEMOTE_KSWAPD,
+	PGDEMOTE_DIRECT,
+#ifdef CONFIG_NUMA_BALANCING
+	PGPROMOTE_SUCCESS,	/* promote successfully */
+#endif
 	MEMCG_SWAP,
 };
 
@@ -3838,6 +3845,13 @@ static const char *const memcg1_stat_names[] = {
 	"mapped_file",
 	"dirty",
 	"writeback",
+	"steal_kswapd",
+	"steal_direct",
+	"demote_kswapd",
+	"demote_direct",
+#ifdef CONFIG_NUMA_BALANCING
+	"promote_success",
+#endif
 	"swap",
 };
 
