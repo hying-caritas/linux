@@ -2284,6 +2284,8 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 	int nr_remaining;
 	int nr_succeeded;
 	LIST_HEAD(migratepages);
+	bool promote;
+	struct mem_cgroup *memcg = NULL;
 
 	/*
 	 * Don't migrate file pages that are mapped in multiple processes
@@ -2300,6 +2302,8 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 		goto out;
 	}
 
+	promote = sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
+		!node_is_toptier(page_to_nid(page)) && node_is_toptier(node);
 	list_add(&page->lru, &migratepages);
 	nr_remaining = migrate_pages(&migratepages, alloc_misplaced_dst_page,
 				     NULL, node, MIGRATE_ASYNC,
@@ -2314,11 +2318,15 @@ int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 		isolated = 0;
 	} else {
 		count_vm_numa_event(NUMA_PAGE_MIGRATE);
-		if (sysctl_numa_balancing_mode & NUMA_BALANCING_MEMORY_TIERING &&
-		    !node_is_toptier(page_to_nid(page)) && node_is_toptier(node))
+		if (promote) {
 			mod_node_page_state(NODE_DATA(node), PGPROMOTE_SUCCESS,
 					    nr_succeeded);
+			memcg = get_mem_cgroup_from_mm(current->mm);
+			mod_memcg_state(memcg, PGPROMOTE_SUCCESS, nr_succeeded);
+		}
 	}
+	if (promote)
+		mem_cgroup_put(memcg);
 	BUG_ON(!list_empty(&migratepages));
 	return isolated;
 
