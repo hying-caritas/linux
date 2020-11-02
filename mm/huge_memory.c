@@ -2386,10 +2386,10 @@ static void remap_page(struct page *page, unsigned int nr)
 {
 	int i;
 	if (PageTransHuge(page)) {
-		remove_migration_ptes(page, page, true);
+		remove_migration_ptes(page, page, RMPTE_LOCKED);
 	} else {
 		for (i = 0; i < nr; i++)
-			remove_migration_ptes(page + i, page + i, true);
+			remove_migration_ptes(page + i, page + i, RMPTE_LOCKED);
 	}
 }
 
