@@ -1093,6 +1093,11 @@ unsigned int sysctl_numa_balancing_rate_limit = 65536;
  * workload specific too.
  */
 unsigned int sysctl_numa_balancing_write_bias = 2;
+/*
+ * Force enable NUMA balancing, even for task or memory area with explicit
+ * memory binding policy
+ */
+unsigned int sysctl_numa_balancing_force_enable = 0;
 
 struct numa_group {
 	refcount_t refcount;
