@@ -1087,6 +1087,12 @@ unsigned int sysctl_numa_balancing_hot_threshold = 1000;
  * if no enough free space in target node
  */
 unsigned int sysctl_numa_balancing_rate_limit = 65536;
+/*
+ * The read/write performance of the slow memory may be different, so it may be
+ * better to use different threshold for memory read and write.  This may be
+ * workload specific too.
+ */
+unsigned int sysctl_numa_balancing_write_bias = 2;
 
 struct numa_group {
 	refcount_t refcount;
@@ -1574,7 +1580,7 @@ bool should_numa_migrate_memory(struct task_struct *p, struct page * page,
 
 		th = pgdat->numa_threshold ? : def_th;
 		if (flags & TNF_WRITE)
-			th *= 2;
+			th *= sysctl_numa_balancing_write_bias;
 		latency = numa_hint_fault_latency(page);
 		if (latency > th)
 			return false;
