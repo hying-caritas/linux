@@ -2294,7 +2294,7 @@ bool pmd_trans_migrating(pmd_t pmd)
  * node. Caller is expected to have an elevated reference count on
  * the page that will be dropped by this function before returning.
  */
-int migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
+int noinline migrate_misplaced_page(struct page *page, struct vm_area_struct *vma,
 			   int node)
 {
 	pg_data_t *pgdat = NODE_DATA(node);
@@ -2359,7 +2359,7 @@ out:
  * Migrates a THP to a given target node. page must be locked and is unlocked
  * before returning.
  */
-int migrate_misplaced_transhuge_page(struct mm_struct *mm,
+int noinline migrate_misplaced_transhuge_page(struct mm_struct *mm,
 				struct vm_area_struct *vma,
 				pmd_t *pmd, pmd_t entry,
 				unsigned long address,

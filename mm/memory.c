@@ -4180,7 +4180,7 @@ static int numa_migrate_prep(struct page *page, struct vm_area_struct *vma,
 	return mpol_misplaced(page, vma, addr, *flags);
 }
 
-static vm_fault_t do_numa_page(struct vm_fault *vmf)
+static noinline vm_fault_t do_numa_page(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct page *page = NULL;
