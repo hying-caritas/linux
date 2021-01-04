@@ -1347,9 +1347,9 @@ static unsigned int demote_page_list(struct list_head *demote_pages,
 
 	file_lru = page_is_file_lru(lru_to_page(demote_pages));
 	/* Demotion ignores all cpuset and mempolicy settings */
-	err = migrate_pages(demote_pages, alloc_demote_page, NULL,
-			    target_nid, MIGRATE_ASYNC, MR_DEMOTION,
-			    &nr_succeeded);
+	err = __migrate_pages(demote_pages, alloc_demote_page, NULL,
+			      target_nid, MIGRATE_ASYNC, MR_DEMOTION,
+			      &nr_succeeded, MGP_BATCH_FLUSH);
 
 	stat->nr_demoted += nr_succeeded;
 	if (file_lru)

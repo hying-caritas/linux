@@ -32,6 +32,9 @@ enum migrate_reason {
 	MR_TYPES
 };
 
+/* __migrate_pages() flags */
+#define MGP_BATCH_FLUSH		0x1
+
 /*  promote_file_page() flags */
 #define PFP_LOCKED		0x1
 #define PFP_WRITE		0x2
@@ -48,6 +51,9 @@ extern int migrate_page(struct address_space *mapping,
 extern int migrate_pages(struct list_head *l, new_page_t new, free_page_t free,
 		unsigned long private, enum migrate_mode mode, int reason,
 		unsigned int *ret_succeeded);
+extern int __migrate_pages(struct list_head *l, new_page_t new, free_page_t free,
+		unsigned long private, enum migrate_mode mode, int reason,
+		unsigned int *ret_succeeded, unsigned int flags);
 extern struct page *alloc_migration_target(struct page *page, unsigned long private);
 extern int isolate_movable_page(struct page *page, isolate_mode_t mode);
 
@@ -64,6 +70,10 @@ static inline void putback_movable_pages(struct list_head *l) {}
 static inline int migrate_pages(struct list_head *l, new_page_t new,
 		free_page_t free, unsigned long private, enum migrate_mode mode,
 		int reason, unsigned int *ret_succeeded)
+	{ return -ENOSYS; }
+static inline int __migrate_pages(struct list_head *l, new_page_t new,
+		free_page_t free, unsigned long private, enum migrate_mode mode,
+		int reason, unsigned int *ret_succeeded, unsigned int flags)
 	{ return -ENOSYS; }
 static inline struct page *alloc_migration_target(struct page *page,
 		unsigned long private)

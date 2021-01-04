@@ -1042,7 +1042,8 @@ out:
 }
 
 static int __unmap_and_move(struct page *page, struct page *newpage,
-				int force, enum migrate_mode mode)
+			    int force, enum migrate_mode mode,
+			    unsigned int flags)
 {
 	int rc = -EAGAIN;
 	int page_was_mapped = 0;
@@ -1145,14 +1146,21 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 		}
 	} else if (page_mapped(page)) {
 		/* Establish migration ptes */
+		enum ttu_flags ttu_flags = TTU_MIGRATION | TTU_IGNORE_MLOCK;
+
 		VM_BUG_ON_PAGE(PageAnon(page) && !PageKsm(page) && !anon_vma,
 				page);
-		try_to_unmap(page, TTU_MIGRATION|TTU_IGNORE_MLOCK);
+		if (flags & MGP_BATCH_FLUSH)
+			ttu_flags |= TTU_BATCH_FLUSH;
+		try_to_unmap(page, ttu_flags);
 		page_was_mapped = 1;
 	}
 
-	if (!page_mapped(page))
+	if (!page_mapped(page)) {
+		if (flags & MGP_BATCH_FLUSH)
+			try_to_unmap_flush_dirty();
 		rc = move_to_new_page(newpage, page, mode);
+	}
 
 	if (page_was_mapped)
 		remove_migration_ptes(page,
@@ -1303,7 +1311,8 @@ static int unmap_and_move(new_page_t get_new_page,
 				   unsigned long private, struct page *page,
 				   int force, enum migrate_mode mode,
 				   enum migrate_reason reason,
-				   struct list_head *ret)
+				   struct list_head *ret,
+				   unsigned int flags)
 {
 	int rc = MIGRATEPAGE_SUCCESS;
 	struct page *newpage = NULL;
@@ -1334,7 +1343,7 @@ static int unmap_and_move(new_page_t get_new_page,
 		set_page_demoted(newpage);
 	}
 
-	rc = __unmap_and_move(page, newpage, force, mode);
+	rc = __unmap_and_move(page, newpage, force, mode, flags);
 	if (rc == MIGRATEPAGE_SUCCESS)
 		set_page_owner_migrate_reason(newpage, reason);
 
@@ -1542,32 +1551,10 @@ static inline int try_split_thp(struct page *page, struct page **page2,
 	return rc;
 }
 
-/*
- * migrate_pages - migrate the pages specified in a list, to the free pages
- *		   supplied as the target for the page migration
- *
- * @from:		The list of pages to be migrated.
- * @get_new_page:	The function used to allocate free pages to be used
- *			as the target of the page migration.
- * @put_new_page:	The function used to free target pages if migration
- *			fails, or NULL if no special handling is necessary.
- * @private:		Private data to be passed on to get_new_page()
- * @mode:		The migration mode that specifies the constraints for
- *			page migration, if any.
- * @reason:		The reason for page migration.
- * @ret_succeeded:	Set to the number of pages migrated successfully if
- *			the caller passes a non-NULL pointer.
- *
- * The function returns after 10 attempts or if no pages are movable any more
- * because the list has become empty or no retryable pages exist any more.
- * It is caller's responsibility to call putback_movable_pages() to return pages
- * to the LRU or free list only if ret != 0.
- *
- * Returns the number of pages that were not migrated, or an error code.
- */
-int migrate_pages(struct list_head *from, new_page_t get_new_page,
+int __migrate_pages(struct list_head *from, new_page_t get_new_page,
 		free_page_t put_new_page, unsigned long private,
-		enum migrate_mode mode, int reason, unsigned int *ret_succeeded)
+		enum migrate_mode mode, int reason, unsigned int *ret_succeeded,
+		unsigned int flags)
 {
 	int retry = 1;
 	int thp_retry = 1;
@@ -1612,7 +1599,7 @@ retry:
 			else
 				rc = unmap_and_move(get_new_page, put_new_page,
 						private, page, pass > 2, mode,
-						reason, &ret_pages);
+						reason, &ret_pages, flags);
 			/*
 			 * The rules are:
 			 *	Success: non hugetlb page will be freed, hugetlb
@@ -1727,6 +1714,37 @@ out:
 		*ret_succeeded = nr_succeeded;
 
 	return rc;
+}
+
+/*
+ * migrate_pages - migrate the pages specified in a list, to the free pages
+ *		   supplied as the target for the page migration
+ *
+ * @from:		The list of pages to be migrated.
+ * @get_new_page:	The function used to allocate free pages to be used
+ *			as the target of the page migration.
+ * @put_new_page:	The function used to free target pages if migration
+ *			fails, or NULL if no special handling is necessary.
+ * @private:		Private data to be passed on to get_new_page()
+ * @mode:		The migration mode that specifies the constraints for
+ *			page migration, if any.
+ * @reason:		The reason for page migration.
+ * @ret_succeeded:	Set to the number of pages migrated successfully if
+ *			the caller passes a non-NULL pointer.
+ *
+ * The function returns after 10 attempts or if no pages are movable any more
+ * because the list has become empty or no retryable pages exist any more.
+ * It is caller's responsibility to call putback_movable_pages() to return pages
+ * to the LRU or free list only if ret != 0.
+ *
+ * Returns the number of pages that were not migrated, or an error code.
+ */
+int migrate_pages(struct list_head *from, new_page_t get_new_page,
+		free_page_t put_new_page, unsigned long private,
+		enum migrate_mode mode, int reason, unsigned int *ret_succeeded)
+{
+	return __migrate_pages(from, get_new_page, put_new_page, private, mode,
+			       reason, ret_succeeded, 0);
 }
 
 struct page *alloc_migration_target(struct page *page, unsigned long private)
