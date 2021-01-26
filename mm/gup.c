@@ -1599,6 +1599,7 @@ static long check_and_migrate_cma_pages(struct mm_struct *mm,
 	unsigned long step;
 	bool drain_allow = true;
 	bool migrate_allow = true;
+	unsigned int nr_succeeded = 0;
 	LIST_HEAD(cma_page_list);
 	long ret = nr_pages;
 	struct migration_target_control mtc = {
@@ -1654,7 +1655,8 @@ check_again:
 				put_page(pages[i]);
 
 		if (migrate_pages(&cma_page_list, alloc_migration_target, NULL,
-			(unsigned long)&mtc, MIGRATE_SYNC, MR_CONTIG_RANGE)) {
+			(unsigned long)&mtc, MIGRATE_SYNC, MR_CONTIG_RANGE,
+				  &nr_succeeded)) {
 			/*
 			 * some of the pages failed migration. Do get_user_pages
 			 * without migration.
