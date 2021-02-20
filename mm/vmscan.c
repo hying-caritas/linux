@@ -2941,7 +2941,8 @@ static inline bool should_continue_reclaim(struct pglist_data *pgdat,
 	return inactive_lru_pages > pages_for_compaction;
 }
 
-static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
+static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc,
+			       bool skip_slab)
 {
 	struct mem_cgroup *target_memcg = sc->target_mem_cgroup;
 	struct mem_cgroup *memcg;
@@ -2987,8 +2988,9 @@ static void shrink_node_memcgs(pg_data_t *pgdat, struct scan_control *sc)
 
 		shrink_lruvec(lruvec, sc);
 
-		shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
-			    sc->priority);
+		if (!skip_slab)
+			shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
+				    sc->priority);
 
 		/* Record the group's reclaim efficiency */
 		vmpressure(sc->gfp_mask, memcg, false,
@@ -3004,6 +3006,7 @@ static void shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 	unsigned long nr_reclaimed, nr_scanned;
 	struct lruvec *target_lruvec;
 	bool reclaimable = false;
+	bool skip_slab;
 	unsigned long file;
 
 	target_lruvec = mem_cgroup_lruvec(sc->target_mem_cgroup, pgdat);
@@ -3102,7 +3105,15 @@ again:
 			anon >> sc->priority;
 	}
 
-	shrink_node_memcgs(pgdat, sc);
+	skip_slab = false;
+retry:
+	shrink_node_memcgs(pgdat, sc, skip_slab);
+	/* Nothing can be scanned with cache trim mode, retry without it */
+	if (sc->cache_trim_mode && sc->nr_scanned == nr_scanned) {
+		sc->cache_trim_mode = 0;
+		skip_slab = true;
+		goto retry;
+	}
 
 	if (reclaim_state) {
 		sc->nr_reclaimed += reclaim_state->reclaimed_slab;
