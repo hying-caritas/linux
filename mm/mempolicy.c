@@ -1294,6 +1294,15 @@ static long do_mbind(unsigned long start, unsigned long len,
 	if (flags & MPOL_MF_LAZY)
 		new->flags |= MPOL_F_MOF;
 
+	if (flags & MPOL_MF_NUMA_BALANCING) {
+		if (new && new->mode == MPOL_PREFERRED_MANY) {
+			new->flags |= (MPOL_F_MOF | MPOL_F_MORON);
+		} else {
+			err = -EINVAL;
+			goto mpol_out;
+		}
+	}
+
 	/*
 	 * If we are using the default policy then operation
 	 * on discontinuous address spaces is okay after all
@@ -2491,6 +2500,8 @@ int mpol_misplaced(struct page *page, struct vm_area_struct *vma, unsigned long 
 
 	case MPOL_PREFERRED:
 	case MPOL_PREFERRED_MANY:
+		if (pol->flags & MPOL_F_MORON)
+			break;
 		if (node_isset(curnid, pol->nodes))
 			goto out;
 		polnid = first_node(pol->nodes);
