@@ -2681,6 +2681,14 @@ static int try_charge_memcg(struct mem_cgroup *memcg, gfp_t gfp_mask,
 	bool raised_max_event = false;
 	unsigned long pflags;
 
+	/*
+	 * Skip the refill in irq context as it may flush the charge cache of
+	 * the process running on the CPUs or the kernel may have to process
+	 * incoming packets for different memcgs.
+	 */
+	if (!in_task())
+		batch = nr_pages;
+
 retry:
 	if (consume_stock(memcg, nr_pages))
 		return 0;
