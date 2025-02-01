@@ -1042,6 +1042,29 @@ static long do_get_mempolicy(int *policy, nodemask_t *nmask,
 	return err;
 }
 
+void check_toptier_balanced(void)
+{
+	int nid;
+	int balanced;
+
+	if (!numa_promotion_tiered_enabled)
+		return;
+
+	for_each_node_state(nid, N_MEMORY) {
+		pg_data_t *pgdat = NODE_DATA(nid);
+
+		if (!node_is_toptier(nid))
+			continue;
+
+		balanced = pgdat_toptier_balanced(pgdat, 0, ZONE_MOVABLE);
+		if (!balanced) {
+			pgdat->kswapd_order = 0;
+			pgdat->kswapd_highest_zoneidx = ZONE_NORMAL;
+			wakeup_kswapd(pgdat->node_zones + ZONE_NORMAL, 0, 1, ZONE_NORMAL);
+		}
+	}
+}
+
 #ifdef CONFIG_MIGRATION
 /*
  * page migration, thp tail pages can be passed.
@@ -2462,7 +2485,7 @@ static void sp_free(struct sp_node *n)
  * Return: -1 if the page is in a node that is valid for this policy, or a
  * suitable node ID to allocate a replacement page from.
  */
-int mpol_misplaced(struct page *page, struct vm_area_struct *vma, unsigned long addr)
+int mpol_misplaced(struct page *page, struct vm_area_struct *vma, unsigned long addr, int flags)
 {
 	struct mempolicy *pol;
 	struct zoneref *z;
@@ -2472,6 +2495,9 @@ int mpol_misplaced(struct page *page, struct vm_area_struct *vma, unsigned long 
 	int thisnid = cpu_to_node(thiscpu);
 	int polnid = NUMA_NO_NODE;
 	int ret = -1;
+
+	if (test_and_clear_page_demoted(page))
+		flags |= TNF_DEMOTED;
 
 	pol = get_vma_policy(vma, addr);
 	if (!(pol->flags & MPOL_F_MOF))
@@ -2522,7 +2548,7 @@ int mpol_misplaced(struct page *page, struct vm_area_struct *vma, unsigned long 
 	if (pol->flags & MPOL_F_MORON) {
 		polnid = thisnid;
 
-		if (!should_numa_migrate_memory(current, page, curnid, thiscpu))
+		if (!should_numa_migrate_memory(current, page, curnid, thiscpu, flags))
 			goto out;
 	}
 
