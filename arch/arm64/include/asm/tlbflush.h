@@ -249,6 +249,18 @@ static inline unsigned long get_trans_granule(void)
  *		cannot be easily determined, the value TLBI_TTL_UNKNOWN will
  *		perform a non-hinted invalidation.
  *
+ *	local_flush_tlb_page(vma, addr)
+ *		Local variant of flush_tlb_page().  Stale TLB entries may
+ *		remain in remote CPUs.
+ *
+ *	local_flush_tlb_page_nonotify(vma, addr)
+ *		Same as local_flush_tlb_page() except MMU notifier will not be
+ *		called.
+ *
+ *	local_flush_tlb_contpte_range(vma, start, end)
+ *		Invalidate the virtual-address range '[start, end)' mapped with
+ *		contpte on local CPU for the user address space corresponding
+ *		to 'vma->mm'.  Stale TLB entries may remain in remote CPUs.
  *
  *	Finally, take a look at asm/tlb.h to see how tlb_flush() is implemented
  *	on top of these routines, since that is our interface to the mmu_gather
@@ -280,6 +292,33 @@ static inline void flush_tlb_mm(struct mm_struct *mm)
 	__tlbi_user(aside1is, asid);
 	dsb(ish);
 	mmu_notifier_arch_invalidate_secondary_tlbs(mm, 0, -1UL);
+}
+
+static inline void __local_flush_tlb_page_nonotify_nosync(
+	struct mm_struct *mm, unsigned long uaddr)
+{
+	unsigned long addr;
+
+	dsb(nshst);
+	addr = __TLBI_VADDR(uaddr, ASID(mm));
+	__tlbi(vale1, addr);
+	__tlbi_user(vale1, addr);
+}
+
+static inline void local_flush_tlb_page_nonotify(
+	struct vm_area_struct *vma, unsigned long uaddr)
+{
+	__local_flush_tlb_page_nonotify_nosync(vma->vm_mm, uaddr);
+	dsb(nsh);
+}
+
+static inline void local_flush_tlb_page(struct vm_area_struct *vma,
+					unsigned long uaddr)
+{
+	__local_flush_tlb_page_nonotify_nosync(vma->vm_mm, uaddr);
+	mmu_notifier_arch_invalidate_secondary_tlbs(vma->vm_mm, uaddr & PAGE_MASK,
+						(uaddr & PAGE_MASK) + PAGE_SIZE);
+	dsb(nsh);
 }
 
 static inline void __flush_tlb_page_nosync(struct mm_struct *mm,
@@ -470,6 +509,23 @@ static inline void __flush_tlb_range(struct vm_area_struct *vma,
 	__flush_tlb_range_nosync(vma->vm_mm, start, end, stride,
 				 last_level, tlb_level);
 	dsb(ish);
+}
+
+static inline void local_flush_tlb_contpte_range(struct vm_area_struct *vma,
+						 unsigned long start, unsigned long end)
+{
+	unsigned long asid, pages;
+
+	start = round_down(start, PAGE_SIZE);
+	end = round_up(end, PAGE_SIZE);
+	pages = (end - start) >> PAGE_SHIFT;
+
+	dsb(nshst);
+	asid = ASID(vma->vm_mm);
+	__flush_tlb_range_op(vale1, start, pages, PAGE_SIZE, asid,
+			     3, true, lpa2_is_enabled());
+	mmu_notifier_arch_invalidate_secondary_tlbs(vma->vm_mm, start, end);
+	dsb(nsh);
 }
 
 static inline void flush_tlb_range(struct vm_area_struct *vma,
